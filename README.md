@@ -1,11 +1,11 @@
-# 🧹 Dev Cleaner Utility
+# 🧹 Dev Cleaner
 
 <p align="center">
     <a href="YOUR_GITHUB_REPO_LINK">
         <img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
     </a>
     <a href="YOUR_GITHUB_REPO_LINK/stargazers">
-        <img src="https://img.shields.io/github/stars/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME?style=social" alt="GitHub stars">
+        <img src="https://img.shields.io/github/stars/jemishavasoya/dev-cleaner?style=social" alt="GitHub stars">
     </a>
 </p>
 
@@ -19,7 +19,6 @@ This tool is for **educational purposes**, focusing on safely removing developme
 
 * **One-Click Cleanup:** Clear Xcode, Flutter, Gradle, npm, Homebrew, and IDE caches.
 * **Interactive Menu:** Allows selection of specific cleanup targets (e.g., Xcode only).
-* **Multi-language Support:** (Placeholder for future support).
 * **Multi-platform Support:** Supports **macOS** and **Linux** (shell script).
 
 ---
@@ -43,4 +42,4 @@ This tool is for **educational purposes**, focusing on safely removing developme
 To download, grant permission, and run the utility in one line:
 
 ```bash
-curl -fsSL [https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/scripts/install.sh](https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/main/scripts/install.sh) -o dev-cleanup.sh && chmod +x dev-cleanup.sh && ./dev-cleanup.sh
+curl -fsSL https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/dev-cleaner.sh -o dev-cleanup.sh && chmod +x dev-cleanup.sh && ./dev-cleanup.sh
