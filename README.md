@@ -9,6 +9,10 @@
     </a>
 </p>
 
+<p align="center">
+  <img src="./images/Poster.png" alt="new" width="800" style="border-radius: 8px;"/><br>
+</p>
+
 ## Support Latest macOS/Linux Dev Environments
 
 This tool is for **educational purposes**, focusing on safely removing development-related junk files (Xcode, Flutter, npm, etc.) to free up disk space.
