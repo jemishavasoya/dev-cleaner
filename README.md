@@ -42,4 +42,4 @@ This tool is for **educational purposes**, focusing on safely removing developme
 To download, grant permission, and run the utility in one line:
 
 ```bash
-curl -fsSL [https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/scripts/install.sh](https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/scripts/install.sh) -o dev-cleanup.sh && chmod +x dev-cleanup.sh && ./dev-cleanup.sh
+curl -fsSL https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/dev-cleaner.sh -o dev-cleanup.sh && chmod +x dev-cleanup.sh && ./dev-cleanup.sh
