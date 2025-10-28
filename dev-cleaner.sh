@@ -173,14 +173,9 @@ display_menu() {
     local current_free_space=$(get_disk_space)
 
     print_logo
-    echo ""
     echo -e "${FAINT}  Version: v${SCRIPT_VERSION}${NC}" # Display version
-    echo -e "${FAINT}  Author: Jemish Vasoya${NC}"
-    echo -e "${FAINT}  Github: ${GITHUB_REPO}${NC}"
-    echo ""
     print_item "✨" "${GREEN}" "Free Space: ${current_free_space}"
     echo ""
-
     print_section_header "Available Options:"
     echo -e "${RED} 0.${NC} ${BOLD}Exit Program${NC}"
     echo -e "${GREEN} 1.${NC} Clear All Caches"
