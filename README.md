@@ -1,4 +1,4 @@
-# 🧹 Dev Cleaner
+# 🧹 Dev Cleaner Utility
 
 <p align="center">
     <a href="YOUR_GITHUB_REPO_LINK">
@@ -7,6 +7,10 @@
     <a href="YOUR_GITHUB_REPO_LINK/stargazers">
         <img src="https://img.shields.io/github/stars/jemishavasoya/dev-cleaner?style=social" alt="GitHub stars">
     </a>
+</p>
+
+<p align="center">
+  <img src="./images/Poster.png" alt="new" width="800" style="border-radius: 8px;"/><br>
 </p>
 
 ## Support Latest macOS/Linux Dev Environments
