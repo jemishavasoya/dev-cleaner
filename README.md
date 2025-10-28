@@ -1,4 +1,4 @@
-# 🧹 Dev Cleaner
+# 🧹 Dev Cleaner Utility
 
 <p align="center">
     <a href="YOUR_GITHUB_REPO_LINK">
