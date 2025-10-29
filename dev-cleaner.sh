@@ -167,6 +167,52 @@ cleanup_system_junk() {
     sudo rm -rf /Library/Logs/*
 }
 
+cleanup_browser_caches() {
+    if [ -d "$HOME/Library/Caches/Google/Chrome" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Chrome cache..."
+        rm -rf ~/Library/Caches/Google/Chrome/*
+    else
+        print_item "✕" "${YELLOW}" "Chrome cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/BraveSoftware/Brave-Browser" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Brave cache..."
+        rm -rf ~/Library/Caches/BraveSoftware/Brave-Browser/*
+    else
+        print_item "✕" "${YELLOW}" "Brave cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/Firefox" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Firefox cache..."
+        rm -rf ~/Library/Caches/Firefox/*
+    else
+        print_item "✕" "${YELLOW}" "Firefox cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/com.apple.Safari" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Safari cache..."
+        rm -rf ~/Library/Caches/com.apple.Safari/*
+    else
+        print_item "✕" "${YELLOW}" "Safari cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/Microsoft Edge" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Microsoft Edge cache..."
+        rm -rf ~/Library/Caches/Microsoft\ Edge/*
+    elif [ -d "$HOME/Library/Caches/com.microsoft.edgemac" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Microsoft Edge cache..."
+        rm -rf ~/Library/Caches/com.microsoft.edgemac/*
+    else
+        print_item "✕" "${YELLOW}" "Microsoft Edge cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/com.operasoftware.Opera" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Opera cache..."
+        rm -rf ~/Library/Caches/com.operasoftware.Opera/*
+    else
+        print_item "✕" "${YELLOW}" "Opera cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/com.operasoftware.OperaGX" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Opera GX cache..."
+        rm -rf ~/Library/Caches/com.operasoftware.OperaGX/*
+    fi
+}
+
 # --- Main Display Function ---
 display_menu() {
     clear
@@ -187,8 +233,9 @@ display_menu() {
     echo -e "${GREEN} 7.${NC} Clear CocoaPods Caches"
     echo -e "${GREEN} 8.${NC} Clear IDE (JetBrains, VSCode) Caches"
     echo -e "${GREEN} 9.${NC} Clean System Junk & Logs (requires sudo)"
+    echo -e "${GREEN}10.${NC} Clear Browser Caches (Chrome, Brave, Firefox, Safari, Edge, Opera)"
     echo ""
-    echo -e "→ Please enter your choice (0-9): ${NC}\c"
+    echo -e "→ Please enter your choice (0-10): ${NC}\c"
 }
 
 # --- Main Logic ---
@@ -223,6 +270,7 @@ main_loop() {
                 cleanup_cocoapods
                 cleanup_ide_caches
                 cleanup_system_junk
+                cleanup_browser_caches
                 ;;
             2)
                 print_section_header "Performing Xcode Cleanup"
@@ -256,8 +304,12 @@ main_loop() {
                 print_section_header "Performing System Junk & Logs Cleanup"
                 cleanup_system_junk
                 ;;
+            10)
+                print_section_header "Performing Browser Caches Cleanup"
+                cleanup_browser_caches
+                ;;
             *)
-                echo -e "${RED}Invalid choice. Please enter a number between 0 and 9.${NC}"
+                echo -e "${RED}Invalid choice. Please enter a number between 0 and 10.${NC}"
                 sleep 2
                 ;;
         esac
