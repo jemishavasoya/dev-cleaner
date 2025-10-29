@@ -21,7 +21,7 @@ This tool is for **educational purposes**, focusing on safely removing developme
 
 ### ✨ Features
 
-* **One-Click Cleanup:** Clear Xcode, Flutter, Gradle, npm, Homebrew, and IDE caches.
+* **One-Click Cleanup:** Clear Xcode, Flutter, Gradle, npm, Homebrew, IDE, and browser caches.
 * **Interactive Menu:** Allows selection of specific cleanup targets (e.g., Xcode only).
 * **Multi-platform Support:** Supports **macOS** and **Linux** (shell script).
 
