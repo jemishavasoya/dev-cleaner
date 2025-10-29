@@ -174,6 +174,12 @@ cleanup_browser_caches() {
     else
         print_item "✕" "${YELLOW}" "Chrome cache not found. Skipping."
     fi
+    if [ -d "$HOME/Library/Caches/BraveSoftware/Brave-Browser" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Brave cache..."
+        rm -rf ~/Library/Caches/BraveSoftware/Brave-Browser/*
+    else
+        print_item "✕" "${YELLOW}" "Brave cache not found. Skipping."
+    fi
     if [ -d "$HOME/Library/Caches/Firefox" ]; then
         print_item "✓" "${GREEN}" "Cleaning Firefox cache..."
         rm -rf ~/Library/Caches/Firefox/*
@@ -185,6 +191,25 @@ cleanup_browser_caches() {
         rm -rf ~/Library/Caches/com.apple.Safari/*
     else
         print_item "✕" "${YELLOW}" "Safari cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/Microsoft Edge" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Microsoft Edge cache..."
+        rm -rf ~/Library/Caches/Microsoft\ Edge/*
+    elif [ -d "$HOME/Library/Caches/com.microsoft.edgemac" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Microsoft Edge cache..."
+        rm -rf ~/Library/Caches/com.microsoft.edgemac/*
+    else
+        print_item "✕" "${YELLOW}" "Microsoft Edge cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/com.operasoftware.Opera" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Opera cache..."
+        rm -rf ~/Library/Caches/com.operasoftware.Opera/*
+    else
+        print_item "✕" "${YELLOW}" "Opera cache not found. Skipping."
+    fi
+    if [ -d "$HOME/Library/Caches/com.operasoftware.OperaGX" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Opera GX cache..."
+        rm -rf ~/Library/Caches/com.operasoftware.OperaGX/*
     fi
 }
 
@@ -208,7 +233,7 @@ display_menu() {
     echo -e "${GREEN} 7.${NC} Clear CocoaPods Caches"
     echo -e "${GREEN} 8.${NC} Clear IDE (JetBrains, VSCode) Caches"
     echo -e "${GREEN} 9.${NC} Clean System Junk & Logs (requires sudo)"
-    echo -e "${GREEN}10.${NC} Clear Browser Caches (Chrome, Firefox, Safari)"
+    echo -e "${GREEN}10.${NC} Clear Browser Caches (Chrome, Brave, Firefox, Safari, Edge, Opera)"
     echo ""
     echo -e "→ Please enter your choice (0-10): ${NC}\c"
 }
