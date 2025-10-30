@@ -87,9 +87,18 @@ find_local_build_artifacts() {
     # Exclusions prevent deep scan into heavy dependency or VCS folders
     find "$search_root" \
         -maxdepth "$max_depth" \
-        \( -name .git -o -name .svn -o -name .hg -o -name .idea -o -name .vscode -o -name node_modules -o -name Pods -o -name Carthage -o -name vendor -o -name .venv -o -name venv -o -name .dart_tool -o -name .gradle -o -name .cache -o -name .next -o -name target/debug -o -name target/release \) -prune -o \
+        \( \
+            -name .git -o -name .svn -o -name .hg -o -name .idea -o -name .vscode -o \
+            -name node_modules -o -name Pods -o -name Carthage -o -name vendor -o \
+            -name .venv -o -name venv -o -name .dart_tool -o -name .gradle -o -name .cache -o -name .next -o \
+            -name target/debug -o -name target/release -o \
+            -path "$HOME/.nvm/*" -o -path "$HOME/.rvm/*" -o -path "$HOME/.pyenv/*" -o \
+            -path "$HOME/.pub-cache/*" -o -path "$HOME/.cache/*" -o -path "$HOME/flutter/*" -o \
+            -path "$HOME/.shorebird/*" -o -path "$HOME/Applications/*" -o -path "$HOME/Library/Python/*" -o \
+            -path "$HOME/.npm/*" -o -path "$HOME/.cargo/*" -o -path "$HOME/.rustup/*" -o -path "$HOME/.cursor/*" \
+        \) -prune -o \
         -type d \
-        \( -name build -o -name dist -o -name out -o -name target -o -name bin \) \
+        \( -name build -o -name dist -o -name out -o -name target \) \
         -print 2>/dev/null
 }
 
