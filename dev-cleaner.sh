@@ -105,6 +105,31 @@ cleanup_flutter() {
     fi
 }
 
+cleanup_platformIO() {
+    local PIO_BIN="$HOME/.platformio/penv/bin/pio"
+
+    if [ -x "$PIO_BIN" ]; then
+        :
+    elif command -v pio >/dev/null 2>&1; then
+        PIO_BIN="$(command -v pio)"
+    else
+        print_item "✕" "${YELLOW}" "pio command not found. Skipping."
+        return 0
+    fi
+
+    print_item "✓" "${GREEN}" "Cleaning PlatformIO project builds (pio run clean)..."
+
+    # Find pubspec.yaml and run 'pio run -t clean' in each directory
+    # -print0 handles spaces/newlines safely
+    find ~/ -maxdepth 4 -type d -name "Library" -prune -o -name "platformio.ini" -print0 | while IFS= read -r -d '' file; do
+        dir="$(dirname "$file")"
+        printf 'Running: %s run clean in %s\n' "$PIO_BIN" "$dir"
+
+        # Run in a subshell to avoid changing caller's CWD
+        ( cd "$dir" && "$PIO_BIN" run -t clean )
+    done
+}
+
 cleanup_npm_yarn() {
     if command -v npm &> /dev/null; then
         print_item "✓" "${GREEN}" "Cleaning npm cache..."
@@ -234,8 +259,9 @@ display_menu() {
     echo -e "${GREEN} 8.${NC} Clear IDE (JetBrains, VSCode) Caches"
     echo -e "${GREEN} 9.${NC} Clean System Junk & Logs (requires sudo)"
     echo -e "${GREEN}10.${NC} Clear Browser Caches (Chrome, Brave, Firefox, Safari, Edge, Opera)"
+    echo -e "${GREEN}11.${NC} Clear PlatformIO Caches"
     echo ""
-    echo -e "→ Please enter your choice (0-10): ${NC}\c"
+    echo -e "→ Please enter your choice (0-11): ${NC}\c"
 }
 
 # --- Main Logic ---
@@ -265,6 +291,7 @@ main_loop() {
                 cleanup_xcode
                 cleanup_android
                 cleanup_flutter
+                cleanup_platformIO
                 cleanup_npm_yarn
                 cleanup_homebrew
                 cleanup_cocoapods
@@ -307,6 +334,10 @@ main_loop() {
             10)
                 print_section_header "Performing Browser Caches Cleanup"
                 cleanup_browser_caches
+                ;;
+            11)
+                print_section_header "Performing PlatformIO Caches cleanup"
+                cleanup_platformIO
                 ;;
             *)
                 echo -e "${RED}Invalid choice. Please enter a number between 0 and 10.${NC}"
