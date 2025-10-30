@@ -120,7 +120,11 @@ cleanup_local_build_artifacts() {
     print_section_header "Scanning for local build artifacts"
     echo -e "Root: ${BOLD}$scan_root${NC} | Depth: ${BOLD}$max_depth${NC}"
 
-    mapfile -t candidates < <(find_local_build_artifacts "$scan_root" "$max_depth")
+    # Populate candidates array in a way compatible with macOS Bash 3.2 (no mapfile)
+    candidates=()
+    while IFS= read -r _cand; do
+        [ -n "$_cand" ] && candidates+=("$_cand")
+    done < <(find_local_build_artifacts "$scan_root" "$max_depth")
 
     if [ ${#candidates[@]} -eq 0 ]; then
         print_item "✕" "${YELLOW}" "No build artifact folders found under the specified root."
