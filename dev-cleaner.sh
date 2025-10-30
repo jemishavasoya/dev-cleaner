@@ -94,7 +94,8 @@ find_local_build_artifacts() {
             -name target/debug -o -name target/release -o \
             -path "$HOME/.nvm/*" -o -path "$HOME/.rvm/*" -o -path "$HOME/.pyenv/*" -o \
             -path "$HOME/.pub-cache/*" -o -path "$HOME/.cache/*" -o -path "$HOME/flutter/*" -o \
-            -path "$HOME/.shorebird/*" -o -path "$HOME/Applications/*" -o -path "$HOME/Library/Python/*" -o \
+            -path "$HOME/.shorebird/*" -o -path "$HOME/Applications/*" -o -path "/Applications/*" -o \
+            -path "/Library/*" -o -path "/System/*" -o -path "$HOME/Library/Python/*" -o \
             -path "$HOME/.npm/*" -o -path "$HOME/.cargo/*" -o -path "$HOME/.rustup/*" -o -path "$HOME/.cursor/*" \
         \) -prune -o \
         -type d \
@@ -119,6 +120,19 @@ cleanup_local_build_artifacts() {
         return
     fi
 
+    # Extra safety for risky roots
+    case "$scan_root" in
+        "/"|"/Users"|"$HOME")
+            echo -e "${YELLOW}${BOLD}High-risk root selected: ${scan_root}${NC}"
+            echo -e "${YELLOW}Scanning broad roots can match many folders. Proceed only if you're certain.${NC}"
+            read -p "Type 'I_UNDERSTAND' to continue, anything else to cancel: " highrisk
+            if [ "$highrisk" != "I_UNDERSTAND" ]; then
+                echo -e "${YELLOW}Cancelled for safety.${NC}"
+                return
+            fi
+            ;;
+    esac
+
     local max_depth
     read -p "Max scan depth (recommended 6) [default: 6]: " max_depth
     if [ -z "$max_depth" ]; then
@@ -141,6 +155,9 @@ cleanup_local_build_artifacts() {
     fi
 
     echo -e "${BLUE}${BOLD}Found ${#candidates[@]} candidate folder(s):${NC}"
+    if [ ${#candidates[@]} -gt 100 ]; then
+        echo -e "${YELLOW}${BOLD}Warning:${NC} Very large result set. Consider narrowing the root or reducing depth."
+    fi
     local sizes=()
     local total_bytes=0
 
@@ -152,6 +169,20 @@ cleanup_local_build_artifacts() {
         echo -e "  ${GREEN}$((idx+1)).${NC} ${p}  ${FAINT}(${size_human})${NC}"
     done
 
+    echo ""
+    # Offer dry-run before selecting deletions
+    read -p "Dry run only (no deletions)? [Y/n]: " dryrun
+    if [ -z "$dryrun" ] || [ "$dryrun" = "Y" ] || [ "$dryrun" = "y" ]; then
+        echo ""
+        print_section_header "Dry Run Preview (no deletions)"
+        for p in "${candidates[@]}"; do
+            local size_human="$(get_dir_size_human "$p")"
+            echo -e "  ${FAINT}${p} (${size_human})${NC}"
+        done
+        echo ""
+        print_item "✓" "${GREEN}" "Dry run complete. No changes made."
+        return
+    fi
     echo ""
     echo -e "${YELLOW}You can choose what to delete:${NC}"
     echo -e "- Enter a comma-separated list (e.g., 1,3,5) to delete specific items"
