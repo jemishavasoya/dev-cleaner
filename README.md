@@ -13,7 +13,7 @@
   <img src="./images/Poster.png" alt="new1" width="800" style="border-radius: 8px;"/><br>
 </p>
 
-## Support Latest macOS/Linux Dev Environments
+## Support Latest macOS/Linux/Windows Dev Environments
 
 This tool is for **educational purposes**, focusing on safely removing development-related junk files (Xcode, Flutter, npm, etc.) to free up disk space.
 
@@ -23,7 +23,7 @@ This tool is for **educational purposes**, focusing on safely removing developme
 
 * **One-Click Cleanup:** Clear Xcode, Flutter, Gradle, npm, Homebrew, IDE, and browser caches.
 * **Interactive Menu:** Allows selection of specific cleanup targets (e.g., Xcode only).
-* **Multi-platform Support:** Supports **macOS** and **Linux** (shell script).
+* **Multi-platform Support:** Supports **macOS**, **Linux** (shell script), and **Windows** (PowerShell script).
 
 ---
 
@@ -33,7 +33,7 @@ This tool is for **educational purposes**, focusing on safely removing developme
 | :--------------- | :----------- | :-------- |
 | macOS            | Intel, Apple Silicon | ✅        |
 | Linux            | x64, ARM64   | ✅        |
-| Windows          | N/A          | ❌ (PowerShell script pending) |
+| Windows          | x64, ARM64   | ✅        |
 
 ---
 
@@ -48,11 +48,25 @@ To download, grant permission, and run the utility in one line:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/dev-cleaner.sh -o dev-cleanup.sh && chmod +x dev-cleanup.sh && ./dev-cleanup.sh
 ```
+
+**Windows (PowerShell)**
+
+To download, grant permission, and run the utility in one line:
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/dev-cleaner.ps1" -OutFile "dev-cleaner.ps1"; .\dev-cleaner.ps1
+```
+
+**Note for Windows users:**
+- Requires PowerShell 5.1 or later (pre-installed on Windows 10/11)
+- Some cleanup operations require Administrator privileges
+- Close development applications (Android Studio, VSCode, etc.) before running
 ### You can also buy me a cup of coffee &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://www.buymeacoffee.com/jempatellbv" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Tea" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## 🤩 Contribution 
 
 We welcome you to submit Issues and Pull Requests!
+
 
 <a href="https://github.com/jemishavasoya/dev-cleaner/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=jemishavasoya/dev-cleaner&preview=true&max=&columns=" />
