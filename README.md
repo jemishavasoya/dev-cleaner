@@ -76,6 +76,6 @@ The Flutter cleanup option (Option 4) performs a comprehensive recursive cleanup
 We welcome you to submit Issues and Pull Requests!
 
 <a href="https://github.com/jemishavasoya/dev-cleaner/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=jemishavasoya/dev-cleaner&preview=true&max=&columns=" />
+  <img src="https://contrib.rocks/image?repo=jemishavasoya/dev-cleaner&preview=false&max=&columns=" />
 </a>
 <br /><br />
