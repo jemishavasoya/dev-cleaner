@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jemishavasoya.github.io/dev-cleaner/sitemap.xml
+

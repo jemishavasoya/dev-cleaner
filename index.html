@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Google Search Console Verification -->
+    <meta name="google-site-verification" content="Jrc36DGhUXi0Ri2SnOIfcINHydQzNYR7r6BA_JIMq9w" />
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Dev Cleaner Utility - A comprehensive tool for cleaning development-related junk files (Xcode, Flutter, npm, Gradle, etc.) to free up disk space on macOS and Linux.">
+    <meta name="keywords" content="dev cleaner, xcode cleanup, flutter cleanup, npm cache, gradle cache, development tools, disk cleanup, macos cleanup, linux cleanup, cocoa pods cleanup">
+    <meta name="author" content="Dev Cleaner">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jemishavasoya.github.io/dev-cleaner/">
+    <meta property="og:title" content="🧹 Dev Cleaner Utility - Clean Development Caches">
+    <meta property="og:description" content="One-click cleanup tool for Xcode, Flutter, npm, Gradle, and more. Free up 50-100GB+ disk space on macOS and Linux.">
+    <meta property="og:image" content="https://jemishavasoya.github.io/dev-cleaner/images/Poster.png">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://jemishavasoya.github.io/dev-cleaner/">
+    <meta property="twitter:title" content="🧹 Dev Cleaner Utility - Clean Development Caches">
+    <meta property="twitter:description" content="One-click cleanup tool for Xcode, Flutter, npm, Gradle, and more. Free up 50-100GB+ disk space on macOS and Linux.">
+    <meta property="twitter:image" content="https://jemishavasoya.github.io/dev-cleaner/images/Poster.png">
+    
+    <title>🧹 Dev Cleaner Utility - Clean Development Caches | macOS & Linux</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 2px solid #f0f0f0;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+        
+        .badges {
+            margin: 20px 0;
+        }
+        
+        .badges a {
+            margin: 0 5px;
+            text-decoration: none;
+        }
+        
+        .poster {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .poster img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .section {
+            margin: 40px 0;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        
+        .section h3 {
+            color: #764ba2;
+            margin: 20px 0 10px 0;
+            font-size: 1.3em;
+        }
+        
+        .section ul, .section ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .section li {
+            margin: 8px 0;
+        }
+        
+        .code-block {
+            background: #f4f4f4;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        table th, table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        table th {
+            background-color: #667eea;
+            color: white;
+        }
+        
+        table tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .feature-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .feature-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .cta {
+            text-align: center;
+            margin: 40px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            color: white;
+        }
+        
+        .cta h3 {
+            color: white;
+            margin-bottom: 15px;
+        }
+        
+        .button {
+            display: inline-block;
+            padding: 12px 30px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 10px;
+            transition: transform 0.2s;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px 0;
+            border-top: 2px solid #f0f0f0;
+            margin-top: 40px;
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                padding: 15px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧹 Dev Cleaner Utility</h1>
+            <div class="badges">
+                <a href="https://github.com/jemishavasoya/dev-cleaner">
+                    <img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
+                </a>
+                <a href="https://github.com/jemishavasoya/dev-cleaner/stargazers">
+                    <img src="https://img.shields.io/github/stars/jemishavasoya/dev-cleaner?style=social" alt="GitHub stars">
+                </a>
+            </div>
+        </div>
+
+        <div class="poster">
+            <img src="./images/Poster.png" alt="Dev Cleaner Utility - Clean Development Caches" width="800" style="border-radius: 8px;">
+        </div>
+
+        <div class="section">
+            <h2>Support Latest macOS/Linux Dev Environments</h2>
+            <p>This tool is for <strong>educational purposes</strong>, focusing on safely removing development-related junk files (Xcode, Flutter, npm, etc.) to free up disk space.</p>
+        </div>
+
+        <div class="section">
+            <h2>✨ Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>One-Click Cleanup</h4>
+                    <p>Clear Xcode, Flutter, Gradle, npm, Homebrew, IDE, and browser caches with a single command.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Comprehensive Flutter Cleanup</h4>
+                    <p>Recursively finds and cleans all Flutter projects, removing FVM SDK caches, build artifacts, and platform-specific caches.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Interactive Menu</h4>
+                    <p>Allows selection of specific cleanup targets (e.g., Xcode only, Flutter only).</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Multi-platform Support</h4>
+                    <p>Supports <strong>macOS</strong> and <strong>Linux</strong> (shell script).</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>💻 System Support</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operating System</th>
+                            <th>Architecture</th>
+                            <th>Supported</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>macOS</td>
+                            <td>Intel, Apple Silicon</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Linux</td>
+                            <td>x64, ARM64</td>
+                            <td>✅</td>
+                        </tr>
+                        <tr>
+                            <td>Windows</td>
+                            <td>N/A</td>
+                            <td>❌ (PowerShell script pending)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>👀 How to Use</h2>
+            
+            <h3>⭐ Auto Run Script</h3>
+            <p><strong>Linux/macOS</strong></p>
+            <p>To download, grant permission, and run the utility in one line:</p>
+            <div class="code-block">
+                <code>curl -fsSL https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/dev-cleaner.sh -o dev-cleanup.sh && chmod +x dev-cleanup.sh && ./dev-cleanup.sh</code>
+            </div>
+
+            <h3>🧹 Flutter Cleanup Details</h3>
+            <p>The Flutter cleanup option (Option 4) performs a comprehensive recursive cleanup of all Flutter projects starting from the current directory. It:</p>
+            <ul>
+                <li><strong>Recursively searches</strong> for all <code>pubspec.yaml</code> files</li>
+                <li><strong>Removes FVM</strong> SDK caches and configurations</li>
+                <li><strong>Cleans build artifacts</strong>: <code>build/</code>, <code>.dart_tool/</code>, <code>.packages</code>, <code>pubspec.lock</code></li>
+                <li><strong>Removes Android Gradle</strong> caches from each project</li>
+                <li><strong>Removes iOS CocoaPods</strong> caches and Flutter frameworks</li>
+                <li><strong>Cleans global Flutter cache</strong></li>
+            </ul>
+            
+            <p><strong>💡 Pro Tip:</strong> If you have active projects you work on daily, consider running the cleanup from a specific subdirectory (e.g., <code>~/old_projects</code> or <code>~/research</code>) rather than your entire development folder. This avoids unnecessary rebuilds of dependencies for active projects.</p>
+            
+            <p><strong>Expected Space Savings:</strong> Users have reported freeing up 50-100GB+ of disk space after running Flutter cleanup on multiple projects.</p>
+        </div>
+
+        <div class="cta">
+            <h3>Support This Project</h3>
+            <p>You can also buy me a cup of coffee</p>
+            <a href="https://www.buymeacoffee.com/jempatellbv" target="_blank" class="button">☕ Buy Me a Coffee</a>
+            <a href="https://github.com/jemishavasoya/dev-cleaner" target="_blank" class="button">⭐ Star on GitHub</a>
+        </div>
+
+        <div class="section">
+            <h2>🤩 Contribution</h2>
+            <p>We welcome you to submit Issues and Pull Requests!</p>
+            <div style="text-align: center; margin: 20px 0;">
+                <a href="https://github.com/jemishavasoya/dev-cleaner/graphs/contributors">
+                    <img src="https://contrib.rocks/image?repo=jemishavasoya/dev-cleaner&preview=true&max=&columns=" alt="Contributors" />
+                </a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2024 Dev Cleaner Utility | Open Source Project</p>
+            <p>Free up disk space by cleaning development caches safely</p>
+        </div>
+    </div>
+</body>
+</html>
+
