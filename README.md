@@ -55,6 +55,40 @@ To download, grant permission, and run the utility in one line:
 curl -fsSL https://raw.githubusercontent.com/jemishavasoya/dev-cleaner/main/dev-cleaner.sh -o dev-cleanup.sh && chmod +x dev-cleanup.sh && ./dev-cleanup.sh
 ```
 
+#### 🍺 Install via Homebrew
+
+**macOS/Linux**
+
+For a permanent installation using Homebrew:
+
+```bash
+# Tap the repository
+brew tap jemishavasoya/dev-cleaner
+
+# Install dev-cleaner
+brew install dev-cleaner
+
+# Run the utility
+dev-cleaner
+
+# Check version
+dev-cleaner --version
+```
+
+To update to the latest version:
+
+```bash
+brew update
+brew upgrade dev-cleaner
+```
+
+To uninstall:
+
+```bash
+brew uninstall dev-cleaner
+brew untap jemishavasoya/dev-cleaner
+```
+
 #### 🧹 Flutter Cleanup Details
 
 The Flutter cleanup option (Option 4) performs a comprehensive recursive cleanup of all Flutter projects starting from the current directory. It:
