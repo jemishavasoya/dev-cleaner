@@ -413,6 +413,14 @@ main_loop() {
     echo -e "${GREEN}Cleanup session ended.${NC}"
 }
 
+# --- Handle command line arguments ---
+if [[ "$1" == "--version" || "$1" == "-v" ]]; then
+    echo "Dev Cleaner v${SCRIPT_VERSION}"
+    echo "A powerful cleanup utility for development environments"
+    echo "Repository: ${GITHUB_REPO}"
+    exit 0
+fi
+
 # --- Initial check for user confirmation before starting the interactive menu ---
 clear
 echo -e "${RED}--- 🚀 Dev Cleanup Utility ---${NC}"
