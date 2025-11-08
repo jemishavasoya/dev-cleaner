@@ -28,7 +28,7 @@ else
 fi
 
 # --- Global Variables ---
-SCRIPT_VERSION="1.0.1"
+SCRIPT_VERSION="1.1.0"
 GITHUB_REPO="https://github.com/jemishavasoya/dev-cleaner"
 
 # Logo
@@ -78,6 +78,14 @@ cleanup_xcode() {
     rm -rf ~/Library/Developer/Xcode/iOS\ DeviceSupport/
     print_item "✓" "${GREEN}" "Removing Xcode caches..."
     rm -rf ~/Library/Caches/com.apple.dt.Xcode/
+    print_item "✓" "${GREEN}" "Removing Xcode Archives..."
+    rm -rf ~/Library/Developer/Xcode/Archives/
+    print_item "✓" "${GREEN}" "Removing Xcode build Products..."
+    rm -rf ~/Library/Developer/Xcode/Products/
+    print_item "✓" "${GREEN}" "Removing Xcode DocumentationCache..."
+    rm -rf ~/Library/Developer/Xcode/DocumentationCache/
+    print_item "✓" "${GREEN}" "Cleaning CoreDevice cache..."
+    rm -rf ~/Library/Containers/com.apple.CoreDevice.CoreDeviceService/Data/Library/Caches/*
 }
 
 cleanup_android() {
@@ -91,6 +99,28 @@ cleanup_android() {
     print_item "✓" "${GREEN}" "Cleaning Android Studio caches..."
     rm -rf ~/Library/Caches/Google/AndroidStudio*
     rm -rf ~/Library/Caches/JetBrains/AndroidStudio*
+}
+
+cleanup_android_sdk() {
+    if [ -d "$HOME/Library/Android/sdk" ]; then
+        print_item "✓" "${GREEN}" "Cleaning old Android SDK build-tools (keeping latest 2 versions)..."
+        # Keep only latest 2 versions of build-tools
+        if [ -d "$HOME/Library/Android/sdk/build-tools" ]; then
+            cd "$HOME/Library/Android/sdk/build-tools" 2>/dev/null || return
+            ls -t | tail -n +3 | xargs -I {} rm -rf {}
+        fi
+
+        print_item "✓" "${GREEN}" "Cleaning old Android platform-tools..."
+        rm -rf ~/Library/Android/sdk/.temp 2>/dev/null || true
+
+        # For Apple Silicon Macs, remove x86 emulator images if they exist
+        if [ "$(uname -m)" = "arm64" ]; then
+            print_item "✓" "${GREEN}" "Removing x86 emulator images (ARM Mac detected)..."
+            find ~/Library/Android/sdk/system-images -type d -name "x86" -exec rm -rf {} + 2>/dev/null || true
+        fi
+    else
+        print_item "✕" "${YELLOW}" "Android SDK not found. Skipping."
+    fi
 }
 
 cleanup_flutter() {
@@ -292,6 +322,67 @@ cleanup_browser_caches() {
     fi
 }
 
+cleanup_app_containers() {
+    print_item "✓" "${GREEN}" "Cleaning app container caches..."
+
+    # Slack
+    if [ -d "$HOME/Library/Containers/com.tinyspeck.slackmacgap" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Slack cache..."
+        rm -rf ~/Library/Containers/com.tinyspeck.slackmacgap/Data/Library/Caches/* 2>/dev/null || true
+    fi
+
+    # Microsoft Teams
+    if [ -d "$HOME/Library/Containers/com.microsoft.teams2" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Microsoft Teams cache..."
+        rm -rf ~/Library/Containers/com.microsoft.teams2/Data/Library/Caches/* 2>/dev/null || true
+    fi
+
+    # WhatsApp
+    if [ -d "$HOME/Library/Containers/net.whatsapp.WhatsApp" ]; then
+        print_item "✓" "${GREEN}" "Cleaning WhatsApp cache..."
+        rm -rf ~/Library/Containers/net.whatsapp.WhatsApp/Data/Library/Caches/* 2>/dev/null || true
+    fi
+
+    # Discord
+    if [ -d "$HOME/Library/Application Support/discord" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Discord cache..."
+        rm -rf ~/Library/Application\ Support/discord/Cache/* 2>/dev/null || true
+        rm -rf ~/Library/Application\ Support/discord/Code\ Cache/* 2>/dev/null || true
+    fi
+
+    # Spotify
+    if [ -d "$HOME/Library/Caches/com.spotify.client" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Spotify cache..."
+        rm -rf ~/Library/Caches/com.spotify.client/* 2>/dev/null || true
+    fi
+    if [ -d "$HOME/Library/Application Support/Spotify/PersistentCache" ]; then
+        rm -rf ~/Library/Application\ Support/Spotify/PersistentCache/* 2>/dev/null || true
+    fi
+}
+
+cleanup_timemachine_snapshots() {
+    print_item "✓" "${GREEN}" "Removing Time Machine local snapshots..."
+
+    # List and delete local snapshots
+    local snapshot_count=0
+    while IFS= read -r snapshot; do
+        if [[ "$snapshot" == *"com.apple.TimeMachine"* ]]; then
+            local snapshot_date=$(echo "$snapshot" | grep -o '[0-9-]*$')
+            if [ -n "$snapshot_date" ]; then
+                print_item "✓" "${GREEN}" "Deleting snapshot: $snapshot_date"
+                sudo tmutil deletelocalsnapshots "$snapshot_date" 2>/dev/null || true
+                snapshot_count=$((snapshot_count + 1))
+            fi
+        fi
+    done < <(sudo tmutil listlocalsnapshots / 2>/dev/null)
+
+    if [ $snapshot_count -eq 0 ]; then
+        print_item "ℹ️" "${YELLOW}" "No Time Machine local snapshots found"
+    else
+        print_item "✓" "${GREEN}" "Deleted $snapshot_count Time Machine snapshot(s)"
+    fi
+}
+
 # --- Main Display Function ---
 display_menu() {
     clear
@@ -314,8 +405,11 @@ display_menu() {
     echo -e "${GREEN} 9.${NC} Clean System Junk & Logs (requires sudo)"
     echo -e "${GREEN}10.${NC} Clear Browser Caches (Chrome, Brave, Firefox, Safari, Edge, Opera)"
     echo -e "${GREEN}11.${NC} Clear PlatformIO Caches"
+    echo -e "${GREEN}12.${NC} Clean Android SDK (old build-tools, x86 images)"
+    echo -e "${GREEN}13.${NC} Clean App Containers (Slack, Teams, Discord, Spotify, WhatsApp)"
+    echo -e "${GREEN}14.${NC} Remove Time Machine Local Snapshots (requires sudo)"
     echo ""
-    echo -e "→ Please enter your choice (0-11): ${NC}\c"
+    echo -e "→ Please enter your choice (0-14): ${NC}\c"
 }
 
 # --- Main Logic ---
@@ -344,6 +438,7 @@ main_loop() {
                 print_section_header "Performing ALL Cleanup Tasks"
                 cleanup_xcode
                 cleanup_android
+                cleanup_android_sdk
                 cleanup_flutter
                 cleanup_platformIO
                 cleanup_npm_yarn
@@ -352,6 +447,8 @@ main_loop() {
                 cleanup_ide_caches
                 cleanup_system_junk
                 cleanup_browser_caches
+                cleanup_app_containers
+                cleanup_timemachine_snapshots
                 ;;
             2)
                 print_section_header "Performing Xcode Cleanup"
@@ -393,8 +490,20 @@ main_loop() {
                 print_section_header "Performing PlatformIO Caches cleanup"
                 cleanup_platformIO
                 ;;
+            12)
+                print_section_header "Performing Android SDK Cleanup"
+                cleanup_android_sdk
+                ;;
+            13)
+                print_section_header "Performing App Containers Cleanup"
+                cleanup_app_containers
+                ;;
+            14)
+                print_section_header "Performing Time Machine Snapshots Cleanup"
+                cleanup_timemachine_snapshots
+                ;;
             *)
-                echo -e "${RED}Invalid choice. Please enter a number between 0 and 10.${NC}"
+                echo -e "${RED}Invalid choice. Please enter a number between 0 and 14.${NC}"
                 sleep 2
                 ;;
         esac
