@@ -5,7 +5,7 @@
         <img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
     </a>
     <a href="YOUR_GITHUB_REPO_LINK/stargazers">
-        <img src="https://img.shields.io/github/stars/jemishavasoya/dev-cleaner?style=social" alt="GitHub stars">
+        <img src="https://img.shields.io/github/stars/jemishavasoya/dev-cleaner" alt="GitHub stars">
     </a>
 </p>
 
