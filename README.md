@@ -174,3 +174,13 @@ We welcome you to submit Issues and Pull Requests!
   <img src="https://contrib.rocks/image?repo=jemishavasoya/dev-cleaner&preview=false&max=&columns=" />
 </a>
 <br /><br />
+
+## Common Issues
+
+### Permission Errors
+- If you encounter permission errors while running scripts, try running with `sudo` (Linux/macOS) or as Administrator (Windows).
+
+### Tool Not Found
+- Make sure tools like `flutter` or `brew` are installed and added to your system PATH.
+- On macOS/Linux, check PATH with `echo $PATH`.
+- On Windows, check Environment Variables in System Settings.
