@@ -379,6 +379,12 @@ cleanup_npm_yarn() {
     else
         print_item "✕" "${YELLOW}" "pnpm not found. Skipping."
     fi
+    if command -v bun &> /dev/null; then
+        print_item "✓" "${GREEN}" "Cleaning bun cache..."
+        bun --cm dl
+    else
+        print_item "✕" "${YELLOW}" "bun not found. Skipping."
+    fi
 }
 
 cleanup_homebrew() {
@@ -544,7 +550,7 @@ display_menu() {
     echo -e "${GREEN} 2.${NC} Clear Xcode Caches & DerivedData"
     echo -e "${GREEN} 3.${NC} Clear Android/Gradle Caches"
     echo -e "${GREEN} 4.${NC} Clear Flutter Caches ${FAINT}(with custom directory option)${NC}"
-    echo -e "${GREEN} 5.${NC} Clear npm/Yarn/pnpm Caches"
+    echo -e "${GREEN} 5.${NC} Clear npm/Yarn/pnpm/bun Caches"
     echo -e "${GREEN} 6.${NC} Clean Homebrew Caches"
     echo -e "${GREEN} 7.${NC} Clear CocoaPods Caches"
     echo -e "${GREEN} 8.${NC} Clear IDE (JetBrains, VSCode) Caches"
@@ -679,7 +685,7 @@ main_loop() {
                 fi
                 ;;
             5)
-                print_section_header "Performing npm/Yarn/pnpm Cleanup"
+                print_section_header "Performing npm/Yarn/pnpm/bun Cleanup"
                 cleanup_npm_yarn
                 ;;
             6)

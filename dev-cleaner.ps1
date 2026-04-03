@@ -336,6 +336,17 @@ function Clear-NpmYarnPnpm {
     # Manual pnpm cache cleanup
     Remove-SafelyWithTracking -Path "$env:LOCALAPPDATA\pnpm\store" -Description "pnpm store"
     Remove-SafelyWithTracking -Path "$env:LOCALAPPDATA\pnpm-cache" -Description "pnpm cache"
+
+    if (Get-Command bun -ErrorAction SilentlyContinue) {
+        Write-Item "✓" "Green" "Cleaning bun cache..."
+        try {
+            bun --cm dl 2>$null
+        } catch {
+            Write-Item "✕" "Yellow" "Could not clean bun cache"
+        }
+    } else {
+        Write-Item "✕" "Yellow" "bun not found. Skipping."
+    }
 }
 
 function Clear-NuGet {
@@ -562,7 +573,7 @@ function Show-Menu {
     Write-Host " 4. Clear Android SDK (old build-tools)" -ForegroundColor Green
     Write-Host " 5. Clear Flutter Caches " -NoNewline -ForegroundColor Green
     Write-Host "(with custom directory option)" -ForegroundColor DarkGray
-    Write-Host " 6. Clear npm/Yarn/pnpm Caches" -ForegroundColor Green
+    Write-Host " 6. Clear npm/Yarn/pnpm/bun Caches" -ForegroundColor Green
     Write-Host " 7. Clear NuGet Package Cache" -ForegroundColor Green
     Write-Host " 8. Clear PlatformIO Caches" -ForegroundColor Green
     Write-Host "─── IDEs & Editors ───" -ForegroundColor DarkGray
@@ -649,7 +660,7 @@ function Start-MainLoop {
                 }
             }
             "6" {
-                Write-SectionHeader "Performing npm/Yarn/pnpm Cleanup"
+                Write-SectionHeader "Performing npm/Yarn/pnpm/bun Cleanup"
                 Clear-NpmYarnPnpm
             }
             "7" {
