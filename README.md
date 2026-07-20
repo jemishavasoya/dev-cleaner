@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="./images/poster_1.0.0.png" alt="poster_1.0.0" style="width:100%; height:auto; style="border-radius: 8px;"/><br>
+  <img src="./images/poster_1.0.1.png" alt="poster_1.0.1" style="width:100%; height:auto; style="border-radius: 8px;"/><br>
 </p>
 
 ## Support Latest macOS/Linux/Windows Dev Environments
