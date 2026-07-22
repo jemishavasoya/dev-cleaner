@@ -480,6 +480,25 @@ cleanup_npm_yarn() {
     fi
 }
 
+cleanup_nuget() {
+    if command -v dotnet &> /dev/null; then
+        print_item "✓" "${GREEN}" "Clearing all NuGet caches (global-packages, http-cache, temp, plugins)..."
+        # NuGet has no --dry-run; honour the flag manually like cleanup_docker.
+        # 'all' covers global-packages (extracted packages, the bulk),
+        # http-cache, temp and plugins-cache; all re-created on next restore.
+        # Matches the Windows dev-cleaner.ps1 which also clears 'all'.
+        if $DRY_RUN; then
+            dotnet nuget locals all --list 2>/dev/null | sed 's/^[a-z-]*: //' | tr -d '\r' | while read -r nuget_dir; do
+                [ -n "$nuget_dir" ] && echo -e "${YELLOW}[DRY-RUN] Would clear NuGet cache: ${nuget_dir}${NC}"
+            done
+        else
+            dotnet nuget locals all --clear
+        fi
+    else
+        print_item "✕" "${YELLOW}" "dotnet (NuGet) not found. Skipping."
+    fi
+}
+
 cleanup_homebrew() {
     if command -v brew &> /dev/null; then
         print_item "✓" "${GREEN}" "Cleaning Homebrew (brew)..."
@@ -506,6 +525,8 @@ cleanup_ide_caches() {
     safe_rm -r "$HOME/Library/Application Support/Code/Cache/"
     safe_rm -r "$HOME/Library/Application Support/Code/CachedData/"
     safe_rm -r "$HOME/Library/Application Support/Code/User/workspaceStorage/"
+    # Downloaded extension .vsix installers; re-fetched if an extension reinstalls.
+    safe_rm -r "$HOME/Library/Application Support/Code/CachedExtensionVSIXs/"
 }
 
 cleanup_system_junk() {
@@ -809,6 +830,20 @@ estimate_all() {
     set_estimate npm "~$(human_kb "$npm_kb")"
     total=$((total + npm_kb))
 
+    print_item "•" "${FAINT}" "Measuring NuGet caches..."
+    local nuget_kb=0 nuget_dir
+    if command -v dotnet >/dev/null 2>&1; then
+        # Enumerate the actual local cache dirs so the estimate matches what
+        # `dotnet nuget locals all --clear` removes (paths are platform-specific).
+        while IFS= read -r nuget_dir; do
+            [ -n "$nuget_dir" ] && nuget_kb=$((nuget_kb + $(du_kb_sum "$nuget_dir")))
+        done < <(dotnet nuget locals all --list 2>/dev/null | sed 's/^[a-z-]*: //' | tr -d '\r')
+    fi
+    # Fallback to the default global-packages dir if enumeration turned up nothing.
+    [ "$nuget_kb" -gt 0 ] || nuget_kb=$(du_kb_sum "$HOME/.nuget/packages")
+    set_estimate nuget "$(human_kb "$nuget_kb")"
+    total=$((total + nuget_kb))
+
     print_item "•" "${FAINT}" "Measuring Homebrew cache..."
     local brew_kb=0 brew_cache
     if command -v brew >/dev/null 2>&1; then
@@ -830,7 +865,8 @@ estimate_all() {
         "$HOME/Library/Caches/JetBrains" \
         "$HOME/Library/Application Support/Code/Cache" \
         "$HOME/Library/Application Support/Code/CachedData" \
-        "$HOME/Library/Application Support/Code/User/workspaceStorage")
+        "$HOME/Library/Application Support/Code/User/workspaceStorage" \
+        "$HOME/Library/Application Support/Code/CachedExtensionVSIXs")
     set_estimate ide "$(human_kb "$kb")"
     total=$((total + kb))
 
@@ -977,10 +1013,11 @@ display_menu() {
     echo -e "${GREEN}15.${NC} Clear Docker (prune containers, dangling images & build cache; asks before removing unused tagged images)$(est docker)"
     echo -e "${GREEN}16.${NC} Clean App Containers (Slack, Teams, Discord, Spotify, WhatsApp)$(est appcontainers)"
     echo -e "${GREEN}17.${NC} Remove Time Machine Local Snapshots (requires sudo)$(est timemachine)"
+    echo -e "${GREEN}18.${NC} Clear .NET NuGet Caches (global-packages, http-cache, temp, plugins)$(est nuget)"
     echo ""
     echo -e "${CYAN}99.${NC} Estimate reclaimable space ${FAINT}(read-only, ~ = approximate)${NC}"
     echo ""
-    echo -e "→ Please enter your choice (0-17, or 99 to estimate): ${NC}\c"
+    echo -e "→ Please enter your choice (0-18, or 99 to estimate): ${NC}\c"
 }
 
 # --- Help function ---
@@ -1048,6 +1085,7 @@ main_loop() {
                 cleanup_flutter "$FLUTTER_SEARCH_DIR"
                 cleanup_platformIO
                 cleanup_npm_yarn
+                cleanup_nuget
                 cleanup_homebrew
                 cleanup_cocoapods
                 cleanup_ide_caches
@@ -1164,6 +1202,10 @@ main_loop() {
                 print_section_header "Performing Time Machine Snapshots Cleanup"
                 cleanup_timemachine_snapshots
                 ;;
+            18)
+                print_section_header "Performing .NET NuGet Cleanup"
+                cleanup_nuget
+                ;;
             99)
                 print_section_header "Estimating Reclaimable Space"
                 estimate_all
@@ -1172,7 +1214,7 @@ main_loop() {
                 continue
                 ;;
             *)
-                echo -e "${RED}Invalid choice. Please enter a number between 0 and 17.${NC}"
+                echo -e "${RED}Invalid choice. Please enter a number between 0 and 18.${NC}"
                 sleep 2
                 ;;
         esac
