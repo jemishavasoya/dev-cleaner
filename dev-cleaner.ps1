@@ -257,8 +257,17 @@ function Clear-AndroidGradle {
         Write-Item "✓" "Green" "Cleaning Gradle caches..."
         Remove-SafelyWithTracking -Path "$env:USERPROFILE\.gradle\caches" -Description "Gradle caches"
         Remove-SafelyWithTracking -Path "$env:USERPROFILE\.gradle\daemon" -Description "Gradle daemon"
+        # Downloaded Gradle distributions; re-fetched on next wrapper run.
+        Remove-SafelyWithTracking -Path "$env:USERPROFILE\.gradle\wrapper" -Description "Gradle wrapper distributions"
     } else {
         Write-Item "✕" "Yellow" "Gradle directory not found. Skipping."
+    }
+
+    if (Test-Path "$env:USERPROFILE\.android") {
+        Write-Item "✓" "Green" "Cleaning Android tool caches..."
+        # Legacy AVD/build caches under ~/.android; regenerated on demand.
+        Remove-SafelyWithTracking -Path "$env:USERPROFILE\.android\cache" -Description "Android cache"
+        Remove-SafelyWithTracking -Path "$env:USERPROFILE\.android\build-cache" -Description "Android build-cache"
     }
 
     Write-Item "✓" "Green" "Cleaning Android Studio caches..."
@@ -710,6 +719,9 @@ function Invoke-EstimateAll {
     $b = Get-PathSizeBytes @(
         "$env:USERPROFILE\.gradle\caches",
         "$env:USERPROFILE\.gradle\daemon",
+        "$env:USERPROFILE\.gradle\wrapper",
+        "$env:USERPROFILE\.android\cache",
+        "$env:USERPROFILE\.android\build-cache",
         "$env:LOCALAPPDATA\Google\AndroidStudio*",
         "$env:LOCALAPPDATA\JetBrains\AndroidStudio*"
     )

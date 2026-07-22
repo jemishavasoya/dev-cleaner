@@ -305,8 +305,16 @@ cleanup_android() {
         print_item "✓" "${GREEN}" "Cleaning Gradle caches..."
         safe_rm -rf ~/.gradle/caches/
         safe_rm -rf ~/.gradle/daemon/
+        # Downloaded Gradle distributions; re-fetched on next wrapper run.
+        safe_rm -rf ~/.gradle/wrapper/
     else
         print_item "✕" "${YELLOW}" "Gradle directory not found. Skipping."
+    fi
+    if [ -d "$HOME/.android" ]; then
+        print_item "✓" "${GREEN}" "Cleaning Android tool caches..."
+        # Legacy AVD/build caches under ~/.android; regenerated on demand.
+        safe_rm -rf ~/.android/cache/
+        safe_rm -rf ~/.android/build-cache/
     fi
     print_item "✓" "${GREEN}" "Cleaning Android Studio caches..."
     safe_rm -rf ~/Library/Caches/Google/AndroidStudio*
@@ -733,6 +741,9 @@ estimate_all() {
     kb=$(du_kb_sum \
         "$HOME/.gradle/caches" \
         "$HOME/.gradle/daemon" \
+        "$HOME/.gradle/wrapper" \
+        "$HOME/.android/cache" \
+        "$HOME/.android/build-cache" \
         "$HOME/Library/Caches/Google"/AndroidStudio* \
         "$HOME/Library/Caches/JetBrains"/AndroidStudio*)
     set_estimate android "$(human_kb "$kb")"
