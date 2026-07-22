@@ -286,6 +286,13 @@ cleanup_xcode() {
     safe_rm -rf ~/Library/Developer/Xcode/DerivedData/
     print_item "✓" "${GREEN}" "Removing old Simulator devices..."
     safe_rm -rf ~/Library/Developer/CoreSimulator/Devices/
+    print_item "✓" "${GREEN}" "Removing CoreSimulator caches..."
+    safe_rm -rf ~/Library/Developer/CoreSimulator/Caches/*
+    # System-level CoreSimulator cache lives under /Library and needs sudo.
+    # Close Xcode/Simulator first so we don't clear files still in use.
+    print_item "ℹ️" "${YELLOW}" "Make sure Xcode and Simulator are closed before clearing the system CoreSimulator cache."
+    print_item "✓" "${GREEN}" "Removing system CoreSimulator caches (sudo)..."
+    safe_sudo_rm -rf /Library/Developer/CoreSimulator/Caches/*
     print_item "✓" "${GREEN}" "Removing old device support files..."
     safe_rm -rf ~/Library/Developer/Xcode/iOS\ DeviceSupport/
     print_item "✓" "${GREEN}" "Removing Xcode caches..."
@@ -728,13 +735,18 @@ estimate_all() {
     kb=$(du_kb_sum \
         "$HOME/Library/Developer/Xcode/DerivedData" \
         "$HOME/Library/Developer/CoreSimulator/Devices" \
+        "$HOME/Library/Developer/CoreSimulator/Caches"/* \
         "$HOME/Library/Developer/Xcode/iOS DeviceSupport" \
         "$HOME/Library/Caches/com.apple.dt.Xcode" \
         "$HOME/Library/Developer/Xcode/Archives" \
         "$HOME/Library/Developer/Xcode/Products" \
         "$HOME/Library/Developer/Xcode/DocumentationCache" \
         "$HOME/Library/Containers/com.apple.CoreDevice.CoreDeviceService/Data/Library/Caches"/*)
-    set_estimate xcode "$(human_kb "$kb")"
+    # System CoreSimulator cache lives under /Library and needs sudo (already
+    # primed by main_loop). Add it to the same figure so the estimate matches
+    # what cleanup_xcode removes.
+    kb=$((kb + $(sudo_du_kb_sum /Library/Developer/CoreSimulator/Caches/*)))
+    set_estimate xcode "~$(human_kb "$kb")"
     total=$((total + kb))
 
     print_item "•" "${FAINT}" "Measuring Android/Gradle caches..."
