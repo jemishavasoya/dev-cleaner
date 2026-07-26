@@ -83,8 +83,12 @@ print_item() {
     echo -e "${color}${icon} ${text}${NC}"
 }
 
+get_disk_space_kb() {
+    df -k . | awk 'NR==2 {print $4}'
+}
+
 get_disk_space() {
-    df -h . | awk 'NR==2 {print $4}'
+    human_kb "$(get_disk_space_kb)"
 }
 
 # --- Estimation helpers (read-only: never delete anything) ---
@@ -171,6 +175,78 @@ sudo_du_kb_sum() {
     echo "$total"
 }
 
+# --- Reclaimed-space accounting ---
+# Free space (df) is a poor progress meter for a cleaner on macOS: on APFS the
+# blocks of a deleted file stay allocated as long as a Time Machine local
+# snapshot still references them (Finder calls that space "purgeable"), so
+# "before vs after" can read the same number right after deleting gigabytes.
+# Every deletion path therefore measures what it removes and adds it here, and
+# the end-of-run summary reports this measured figure next to the df delta.
+RECLAIMED_KB=0
+# Subset of RECLAIMED_KB that host free space can never reflect (Docker frees
+# it inside its own disk image). Excluded when deciding whether the free-space
+# reading "should" have moved, so Docker never triggers the snapshot hint.
+HOST_INVISIBLE_KB=0
+
+add_reclaimed_kb() {
+    local kb="${1:-0}"
+    [[ "$kb" =~ ^[0-9]+$ ]] || return 0
+    RECLAIMED_KB=$((RECLAIMED_KB + kb))
+}
+
+# Number of Time Machine local snapshots on the boot volume. These are what
+# usually keep just-deleted data on disk. Read-only, no sudo needed.
+local_snapshot_count() {
+    [ "$(uname)" = "Darwin" ] || { echo 0; return 0; }
+    tmutil listlocalsnapshots / 2>/dev/null | grep -c 'com.apple.TimeMachine'
+}
+
+# Explain the gap when gigabytes were deleted but free space barely moved,
+# instead of leaving the user staring at "21Gi → 21Gi". On APFS that gap is
+# almost always a Time Machine local snapshot still pinning the deleted blocks.
+# Usage: print_reclaim_hint <reclaimed_kb> <free_space_delta_kb>
+print_reclaim_hint() {
+    local reclaimed_kb="${1:-0}" delta_kb="${2:-0}"
+    [ "$(uname)" = "Darwin" ] || return 0
+    # Only worth explaining when something sizable went away (>100Mi) and free
+    # space did not follow. Half is a generous margin for whatever else the
+    # system wrote to disk while the cleanup was running.
+    [ "$reclaimed_kb" -ge 102400 ] || return 0
+    [ "$delta_kb" -lt $((reclaimed_kb / 2)) ] || return 0
+
+    local snaps
+    snaps=$(local_snapshot_count)
+    echo ""
+    if [ "${snaps:-0}" -gt 0 ]; then
+        print_item "ℹ️" "${YELLOW}" "Free space has not caught up: ${snaps} Time Machine local snapshot(s) still reference the deleted files, so APFS keeps their blocks allocated."
+        print_item "→" "${CYAN}" "macOS releases them on its own (usually within 24h, sooner if the disk fills up), or run option 17 to delete the snapshots now."
+    else
+        print_item "ℹ️" "${YELLOW}" "Free space has not caught up: macOS still counts the deleted data as 'purgeable'."
+        print_item "→" "${CYAN}" "Apps holding the deleted files open (Xcode, Simulator, Docker, browsers) keep that space allocated until they quit."
+    fi
+}
+
+# Run a cleanup command that shrinks a cache *in place* (npm/brew/dotnet/…
+# manage their own directories, so safe_rm never sees those bytes) and credit
+# the size difference to the reclaimed total.
+# Usage: tracked_run <path> [<path> ...] -- <command> [<args> ...]
+tracked_run() {
+    local paths=()
+    while [[ $# -gt 0 && "$1" != "--" ]]; do
+        paths+=("$1")
+        shift
+    done
+    [ $# -gt 0 ] && shift  # drop the --
+
+    local before after status
+    before=$(du_kb_sum "${paths[@]}")
+    "$@"
+    status=$?
+    after=$(du_kb_sum "${paths[@]}")
+    [ "$before" -gt "$after" ] && add_reclaimed_kb $((before - after))
+    return $status
+}
+
 # Dry-run aware file/directory removal
 # Usage: safe_rm [-r] <path> [<path> ...]
 safe_rm() {
@@ -205,14 +281,17 @@ safe_rm() {
         
         for expanded_path in "${expanded_paths[@]}"; do
             if [[ -e "$expanded_path" ]]; then
+                # Measure before deleting: afterwards the size is gone with it.
+                # This is what the summary reports as "Reclaimed", since df
+                # cannot be trusted right after the deletion (see RECLAIMED_KB).
+                local kb
+                kb=$(du -sk "$expanded_path" 2>/dev/null | awk '{print $1}')
+                add_reclaimed_kb "${kb:-0}"
                 if $DRY_RUN; then
-                    local size=""
                     if [[ -d "$expanded_path" ]]; then
-                        size=$(du -sh "$expanded_path" 2>/dev/null | cut -f1)
-                        echo -e "${YELLOW}[DRY-RUN] Would delete directory: ${expanded_path} (${size:-unknown size})${NC}"
+                        echo -e "${YELLOW}[DRY-RUN] Would delete directory: ${expanded_path} ($(human_kb "${kb:-0}"))${NC}"
                     else
-                        size=$(du -h "$expanded_path" 2>/dev/null | cut -f1)
-                        echo -e "${YELLOW}[DRY-RUN] Would delete file: ${expanded_path} (${size:-unknown size})${NC}"
+                        echo -e "${YELLOW}[DRY-RUN] Would delete file: ${expanded_path} ($(human_kb "${kb:-0}"))${NC}"
                     fi
                 else
                     if [[ -n "$recursive" ]]; then
@@ -259,14 +338,15 @@ safe_sudo_rm() {
         
         for expanded_path in "${expanded_paths[@]}"; do
             if [[ -e "$expanded_path" ]] || sudo test -e "$expanded_path" 2>/dev/null; then
+                # Measured before the deletion, like safe_rm: feeds "Reclaimed".
+                local kb
+                kb=$(sudo du -sk "$expanded_path" 2>/dev/null | awk '{print $1}')
+                add_reclaimed_kb "${kb:-0}"
                 if $DRY_RUN; then
-                    local size=""
                     if [[ -d "$expanded_path" ]] || sudo test -d "$expanded_path" 2>/dev/null; then
-                        size=$(sudo du -sh "$expanded_path" 2>/dev/null | cut -f1)
-                        echo -e "${YELLOW}[DRY-RUN] Would delete directory (sudo): ${expanded_path} (${size:-unknown size})${NC}"
+                        echo -e "${YELLOW}[DRY-RUN] Would delete directory (sudo): ${expanded_path} ($(human_kb "${kb:-0}"))${NC}"
                     else
-                        size=$(sudo du -h "$expanded_path" 2>/dev/null | cut -f1)
-                        echo -e "${YELLOW}[DRY-RUN] Would delete file (sudo): ${expanded_path} (${size:-unknown size})${NC}"
+                        echo -e "${YELLOW}[DRY-RUN] Would delete file (sudo): ${expanded_path} ($(human_kb "${kb:-0}"))${NC}"
                     fi
                 else
                     if [[ -n "$recursive" ]]; then
@@ -389,32 +469,39 @@ cleanup_flutter() {
                 continue
             }
             
+            # Deletions go through safe_rm so they honour --dry-run and count
+            # towards the reclaimed total like every other cleanup option.
+
             # --- 1. FVM destroy ---
             if [ -d ".fvm" ]; then
                 echo -e "${FAINT}    🔥 Destroying FVM SDK cache...${NC}"
-                yes | fvm destroy >/dev/null 2>&1 || true
+                if $DRY_RUN; then
+                    echo -e "${YELLOW}[DRY-RUN] Would run: fvm destroy in ${project_dir}${NC}"
+                else
+                    yes | fvm destroy >/dev/null 2>&1 || true
+                fi
             fi
-            
+
             # --- 2. Remove FVM configs ---
             if [ -d ".fvm" ] || [ -f ".fvmrc" ]; then
                 echo -e "${FAINT}    🔥 Removing FVM folders...${NC}"
-                rm -rf .fvm .fvmrc 2>/dev/null || true
+                safe_rm -r .fvm .fvmrc
             fi
-            
+
             # --- 3. Clean Flutter build & cache dirs ---
             echo -e "${FAINT}    🔥 Removing Flutter build and Pub Dev caches...${NC}"
-            rm -rf build .dart_tool .packages pubspec.lock 2>/dev/null || true
-            
+            safe_rm -r build .dart_tool .packages pubspec.lock
+
             # --- 4. Clean Gradle caches ---
             if [ -d "android" ]; then
                 echo -e "${FAINT}    🔥 Removing Gradle caches...${NC}"
-                rm -rf android/.gradle android/build android/app/build 2>/dev/null || true
+                safe_rm -r android/.gradle android/build android/app/build
             fi
-            
+
             # --- 5. Clean CocoaPods (iOS) ---
             if [ -d "ios" ]; then
                 echo -e "${FAINT}    🔥 Removing CocoaPods caches...${NC}"
-                rm -rf ios/Pods ios/Podfile.lock ios/.symlinks ios/Flutter/Flutter.framework ios/Flutter/Flutter.podspec 2>/dev/null || true
+                safe_rm -r ios/Pods ios/Podfile.lock ios/.symlinks ios/Flutter/Flutter.framework ios/Flutter/Flutter.podspec
             fi
             
             cleaned_count=$((cleaned_count + 1))
@@ -428,7 +515,17 @@ cleanup_flutter() {
         fi
         
         print_item "✓" "${GREEN}" "Cleaning Flutter global cache..."
-        flutter cache clean 2>/dev/null || true
+        # The SDK cache sits next to the flutter binary; measure it around the
+        # call so it lands in the reclaimed total (flutter clears it itself).
+        local froot flutter_cache=""
+        froot="$(cd "$(dirname "$(command -v flutter)")" 2>/dev/null && pwd)"
+        [ -n "$froot" ] && flutter_cache="$froot/cache"
+        if $DRY_RUN; then
+            add_reclaimed_kb "$(du_kb_sum "$flutter_cache")"
+            echo -e "${YELLOW}[DRY-RUN] Would run: flutter cache clean (${flutter_cache:-global cache})${NC}"
+        else
+            tracked_run "$flutter_cache" -- flutter cache clean 2>/dev/null || true
+        fi
     else
         print_item "✕" "${YELLOW}" "Flutter command not found. Skipping."
     fi
@@ -460,21 +557,28 @@ cleanup_platformIO() {
 }
 
 cleanup_npm_yarn() {
+    # These tools manage their own cache directories, so safe_rm never sees the
+    # bytes: wrap them in tracked_run so they still land in the "Reclaimed" total.
+    local cache_dir
     if command -v npm &> /dev/null; then
         print_item "✓" "${GREEN}" "Cleaning npm cache..."
-        npm cache clean --force
+        cache_dir="$(npm config get cache 2>/dev/null)"
+        case "$cache_dir" in ""|undefined|null) cache_dir="$HOME/.npm" ;; esac
+        tracked_run "$cache_dir/_cacache" -- npm cache clean --force
     else
         print_item "✕" "${YELLOW}" "npm not found. Skipping."
     fi
     if command -v yarn &> /dev/null; then
         print_item "✓" "${GREEN}" "Cleaning yarn cache..."
-        yarn cache clean
+        cache_dir="$(yarn cache dir 2>/dev/null)"
+        tracked_run "${cache_dir:-$HOME/Library/Caches/Yarn}" -- yarn cache clean
     else
         print_item "✕" "${YELLOW}" "yarn not found. Skipping."
     fi
     if command -v pnpm &> /dev/null; then
         print_item "✓" "${GREEN}" "Pruning pnpm store..."
-        pnpm store prune
+        cache_dir="$(pnpm store path 2>/dev/null)"
+        tracked_run "${cache_dir:-$HOME/Library/pnpm/store}" -- pnpm store prune
     else
         print_item "✕" "${YELLOW}" "pnpm not found. Skipping."
     fi
@@ -487,12 +591,20 @@ cleanup_nuget() {
         # 'all' covers global-packages (extracted packages, the bulk),
         # http-cache, temp and plugins-cache; all re-created on next restore.
         # Matches the Windows dev-cleaner.ps1 which also clears 'all'.
+        # Enumerate the cache dirs first so their size can be credited to the
+        # "Reclaimed" total (dotnet clears them itself, safe_rm never sees them).
+        local nuget_dirs=() nuget_dir kb
+        while IFS= read -r nuget_dir; do
+            [ -n "$nuget_dir" ] && nuget_dirs+=("$nuget_dir")
+        done < <(dotnet nuget locals all --list 2>/dev/null | sed 's/^[a-z-]*: //' | tr -d '\r')
         if $DRY_RUN; then
-            dotnet nuget locals all --list 2>/dev/null | sed 's/^[a-z-]*: //' | tr -d '\r' | while read -r nuget_dir; do
-                [ -n "$nuget_dir" ] && echo -e "${YELLOW}[DRY-RUN] Would clear NuGet cache: ${nuget_dir}${NC}"
+            for nuget_dir in "${nuget_dirs[@]}"; do
+                kb=$(du_kb_sum "$nuget_dir")
+                add_reclaimed_kb "$kb"
+                echo -e "${YELLOW}[DRY-RUN] Would clear NuGet cache: ${nuget_dir} ($(human_kb "$kb"))${NC}"
             done
         else
-            dotnet nuget locals all --clear
+            tracked_run "${nuget_dirs[@]}" -- dotnet nuget locals all --clear
         fi
     else
         print_item "✕" "${YELLOW}" "dotnet (NuGet) not found. Skipping."
@@ -502,7 +614,8 @@ cleanup_nuget() {
 cleanup_homebrew() {
     if command -v brew &> /dev/null; then
         print_item "✓" "${GREEN}" "Cleaning Homebrew (brew)..."
-        brew cleanup
+        # brew prunes its own cache dir, so measure that dir around the call.
+        tracked_run "$(brew --cache 2>/dev/null)" -- brew cleanup
     else
         print_item "✕" "${YELLOW}" "Homebrew not found. Skipping."
     fi
@@ -631,6 +744,7 @@ cleanup_timemachine_snapshots() {
 
     # List and delete local snapshots
     local snapshot_count=0
+    local free_before=$(get_disk_space_kb)
     while IFS= read -r snapshot; do
         if [[ "$snapshot" == *"com.apple.TimeMachine"* ]]; then
             local snapshot_date=$(echo "$snapshot" | grep -o '[0-9-]*$')
@@ -650,6 +764,15 @@ cleanup_timemachine_snapshots() {
         print_item "ℹ️" "${YELLOW}" "No Time Machine local snapshots found"
     else
         print_item "✓" "${GREEN}" "Deleted $snapshot_count Time Machine snapshot(s)"
+    fi
+
+    # Snapshots hold no files of their own, so there is nothing to measure with
+    # du: deleting them is the one case where df reacts immediately, so credit
+    # its delta. Skipped when another cleanup already ran this round ("Clear
+    # All"), because those same blocks were counted as deleted files already.
+    if ! $DRY_RUN && [ $snapshot_count -gt 0 ] && [ "$RECLAIMED_KB" -eq 0 ]; then
+        local freed_kb=$(( $(get_disk_space_kb) - free_before ))
+        [ "$freed_kb" -gt 0 ] && add_reclaimed_kb "$freed_kb"
     fi
 }
 
@@ -718,7 +841,22 @@ cleanup_docker() {
         echo -e "${YELLOW}[DRY-RUN] Would run: docker system prune -f${NC}"
         echo -e "${FAINT}  (option 15 also offers 'docker system prune -af' to remove unused tagged images)${NC}"
     else
-        docker system prune $prune_args
+        # Capture the output to read docker's own "Total reclaimed space" line
+        # (its data lives inside the VM disk image, so nothing here is visible
+        # to du or df on the host), then print it as usual.
+        local prune_out reclaimed_tok
+        prune_out=$(docker system prune $prune_args 2>&1)
+        echo "$prune_out"
+        reclaimed_tok=$(echo "$prune_out" | awk '/Total reclaimed space:/ {print $NF}')
+        if [ -n "$reclaimed_tok" ]; then
+            local docker_kb
+            docker_kb=$(docker_size_to_kb "$reclaimed_tok")
+            add_reclaimed_kb "$docker_kb"
+            HOST_INVISIBLE_KB=$((HOST_INVISIBLE_KB + docker_kb))
+            if [ "$(uname)" = "Darwin" ]; then
+                print_item "ℹ️" "${YELLOW}" "Docker freed this inside its own disk image; macOS free space follows only once Docker Desktop compacts it."
+            fi
+        fi
     fi
 }
 
@@ -1045,6 +1183,13 @@ Interactive menu:
   nothing) and works in --dry-run too. A leading "~" marks an approximate
   value; Flutter and PlatformIO estimates cover the global cache only.
 
+  After a cleanup the summary reports "Reclaimed", measured on what was
+  actually deleted, next to the free-space reading. On macOS the two often
+  disagree: APFS keeps the blocks of a deleted file allocated while a Time
+  Machine local snapshot still references them, so free space can stay flat
+  for hours. The script says so and points at option 17, which deletes those
+  snapshots and releases the space immediately.
+
 Examples:
   $0                                    # Run interactive menu (searches current directory for Flutter projects)
   $0 --dry-run                          # Preview what would be deleted without removing anything
@@ -1070,7 +1215,10 @@ main_loop() {
         read -r choice
         echo "" # New line for better separation
 
-        local initial_free_space=$(get_disk_space)
+        # Reset per menu action: the summary reports this run only.
+        RECLAIMED_KB=0
+        HOST_INVISIBLE_KB=0
+        local initial_free_kb=$(get_disk_space_kb)
 
         case "$choice" in
             0)
@@ -1219,15 +1367,20 @@ main_loop() {
                 ;;
         esac
 
-        local final_free_space=$(get_disk_space)
+        local final_free_kb=$(get_disk_space_kb)
+        local free_delta_kb=$((final_free_kb - initial_free_kb))
         echo ""
         if $DRY_RUN; then
             echo -e "${CYAN}🔍 Dry-run analysis completed!${NC}"
+            echo -e "${CYAN}Would reclaim: ~$(human_kb "$RECLAIMED_KB")${NC}"
             echo -e "${CYAN}No files were deleted. Run without --dry-run to perform actual cleanup.${NC}"
         else
             echo -e "${GREEN}✅ Cleanup task(s) completed!${NC}"
-            echo -e "${BLUE}Disk space before: ${initial_free_space}${NC}"
-            echo -e "${BLUE}Disk space after:  ${final_free_space}${NC}"
+            # "Reclaimed" is measured on what was actually deleted; the free
+            # space line can lag behind it by design (see print_reclaim_hint).
+            echo -e "${BLUE}Reclaimed:  ~$(human_kb "$RECLAIMED_KB")${NC}"
+            echo -e "${BLUE}Free space: $(human_kb "$initial_free_kb") → $(human_kb "$final_free_kb")${NC}"
+            print_reclaim_hint $((RECLAIMED_KB - HOST_INVISIBLE_KB)) "$free_delta_kb"
         fi
         echo ""
         read -p "Press Enter to return to the menu..."
