@@ -87,6 +87,29 @@ get_disk_space() {
     df -h . | awk 'NR==2 {print $4}'
 }
 
+# macOS refuses to delete parts of /Library (notably the CoreSimulator dyld
+# cache) unless the *terminal app* running this script holds Full Disk Access.
+# The check is TCC/per-app, not per-user, so sudo alone does not lift it and
+# rm fails with EPERM. Reading the TCC database is the canonical probe.
+# Memoized: the answer cannot change while the script runs.
+FULL_DISK_ACCESS=""
+has_full_disk_access() {
+    [ "$(uname)" = "Darwin" ] || return 0
+    if [ -z "$FULL_DISK_ACCESS" ]; then
+        if head -c 1 "/Library/Application Support/com.apple.TCC/TCC.db" >/dev/null 2>&1; then
+            FULL_DISK_ACCESS="yes"
+        else
+            FULL_DISK_ACCESS="no"
+        fi
+    fi
+    [ "$FULL_DISK_ACCESS" = "yes" ]
+}
+
+print_full_disk_access_hint() {
+    print_item "→" "${CYAN}" "Grant Full Disk Access to your terminal, then re-run:"
+    echo -e "  ${FAINT}System Settings → Privacy & Security → Full Disk Access → enable your terminal app (Terminal, iTerm, VS Code…), then restart it.${NC}"
+}
+
 # --- Estimation helpers (read-only: never delete anything) ---
 
 # Format a size given in KB into a human-readable string using the same
@@ -227,9 +250,12 @@ safe_rm() {
 }
 
 # Dry-run aware sudo file/directory removal
+# Returns non-zero if any removal failed (e.g. macOS denied it), so callers
+# can print an actionable hint instead of leaving raw rm errors on screen.
 # Usage: safe_sudo_rm [-r] <path> [<path> ...]
 safe_sudo_rm() {
     local recursive=""
+    local status=0
     local paths=()
     
     # Parse arguments
@@ -270,14 +296,16 @@ safe_sudo_rm() {
                     fi
                 else
                     if [[ -n "$recursive" ]]; then
-                        sudo rm -rf "$expanded_path"
+                        sudo rm -rf "$expanded_path" || status=1
                     else
-                        sudo rm -f "$expanded_path"
+                        sudo rm -f "$expanded_path" || status=1
                     fi
                 fi
             fi
         done
     done
+
+    return $status
 }
 
 # --- Cleanup Functions ---
@@ -288,11 +316,23 @@ cleanup_xcode() {
     safe_rm -rf ~/Library/Developer/CoreSimulator/Devices/
     print_item "✓" "${GREEN}" "Removing CoreSimulator caches..."
     safe_rm -rf ~/Library/Developer/CoreSimulator/Caches/*
-    # System-level CoreSimulator cache lives under /Library and needs sudo.
+    # System-level CoreSimulator cache lives under /Library and needs sudo *and*
+    # Full Disk Access; without the latter macOS denies every unlink and rm
+    # floods the screen with "Operation not permitted". Check first, then act.
     # Close Xcode/Simulator first so we don't clear files still in use.
-    print_item "ℹ️" "${YELLOW}" "Make sure Xcode and Simulator are closed before clearing the system CoreSimulator cache."
-    print_item "✓" "${GREEN}" "Removing system CoreSimulator caches (sudo)..."
-    safe_sudo_rm -rf /Library/Developer/CoreSimulator/Caches/*
+    if compgen -G "/Library/Developer/CoreSimulator/Caches/*" >/dev/null; then
+        if has_full_disk_access; then
+            print_item "ℹ️" "${YELLOW}" "Make sure Xcode and Simulator are closed before clearing the system CoreSimulator cache."
+            print_item "✓" "${GREEN}" "Removing system CoreSimulator caches (sudo)..."
+            if ! safe_sudo_rm -rf /Library/Developer/CoreSimulator/Caches/* 2>/dev/null; then
+                print_item "✕" "${YELLOW}" "System CoreSimulator cache could not be removed: macOS denied it even with sudo."
+                print_item "→" "${CYAN}" "Quit Xcode and Simulator and try again; it is rebuilt automatically on next simulator launch."
+            fi
+        else
+            print_item "✕" "${YELLOW}" "Skipping system CoreSimulator cache: macOS blocks it without Full Disk Access."
+            print_full_disk_access_hint
+        fi
+    fi
     print_item "✓" "${GREEN}" "Removing old device support files..."
     safe_rm -rf ~/Library/Developer/Xcode/iOS\ DeviceSupport/
     print_item "✓" "${GREEN}" "Removing Xcode caches..."
@@ -764,9 +804,11 @@ estimate_all() {
         "$HOME/Library/Developer/Xcode/DocumentationCache" \
         "$HOME/Library/Containers/com.apple.CoreDevice.CoreDeviceService/Data/Library/Caches"/*)
     # System CoreSimulator cache lives under /Library and needs sudo (already
-    # primed by main_loop). Add it to the same figure so the estimate matches
-    # what cleanup_xcode removes.
-    kb=$((kb + $(sudo_du_kb_sum /Library/Developer/CoreSimulator/Caches/*)))
+    # primed by main_loop) plus Full Disk Access. Only count it when cleanup can
+    # actually delete it, so the estimate never promises unreclaimable space.
+    if has_full_disk_access; then
+        kb=$((kb + $(sudo_du_kb_sum /Library/Developer/CoreSimulator/Caches/*)))
+    fi
     set_estimate xcode "~$(human_kb "$kb")"
     total=$((total + kb))
 
