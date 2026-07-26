@@ -542,7 +542,21 @@ cleanup_nuget() {
 cleanup_homebrew() {
     if command -v brew &> /dev/null; then
         print_item "✓" "${GREEN}" "Cleaning Homebrew (brew)..."
-        brew cleanup
+        # --prune=all empties the whole download cache (bottles, casks, bottle
+        # manifests) instead of only entries older than 120 days
+        # (HOMEBREW_CLEANUP_MAX_AGE_DAYS), which on a recently-updated machine
+        # frees nothing at all. Everything there is re-downloadable from
+        # Homebrew's CDN, so the only cost is bandwidth on the next
+        # install/upgrade. It is also what estimate_all() measures below, so
+        # plain `brew cleanup` made the estimate promise space it would not
+        # reclaim.
+        # brew has a native dry-run, so use it instead of a manual guard.
+        if $DRY_RUN; then
+            echo -e "${YELLOW}[DRY-RUN] Would run: brew cleanup --prune=all${NC}"
+            brew cleanup --prune=all --dry-run
+        else
+            brew cleanup --prune=all
+        fi
     else
         print_item "✕" "${YELLOW}" "Homebrew not found. Skipping."
     fi
@@ -890,7 +904,13 @@ estimate_all() {
     local brew_kb=0 brew_cache
     if command -v brew >/dev/null 2>&1; then
         brew_cache="$(brew --cache 2>/dev/null)"
-        [ -n "$brew_cache" ] && brew_kb=$(du_kb_sum "$brew_cache")
+        if [ -n "$brew_cache" ]; then
+            brew_kb=$(du_kb_sum "$brew_cache")
+            # `brew cleanup --prune=all` empties the download cache but leaves
+            # the JSON API metadata and the bootsnap compile cache in place, so
+            # they are not reclaimable and must not be counted here.
+            brew_kb=$((brew_kb - $(du_kb_sum "$brew_cache/api" "$brew_cache/bootsnap")))
+        fi
     fi
     set_estimate homebrew "~$(human_kb "$brew_kb")"
     total=$((total + brew_kb))
@@ -1043,7 +1063,7 @@ display_menu() {
     echo -e "${GREEN} 3.${NC} Clear Android/Gradle Caches$(est android)"
     echo -e "${GREEN} 4.${NC} Clear Flutter Caches ${FAINT}(with custom directory option)${NC}$(est flutter)"
     echo -e "${GREEN} 5.${NC} Clear npm/Yarn/pnpm Caches$(est npm)"
-    echo -e "${GREEN} 6.${NC} Clean Homebrew Caches$(est homebrew)"
+    echo -e "${GREEN} 6.${NC} Clean Homebrew Caches ${FAINT}(removes all cached downloads)${NC}$(est homebrew)"
     echo -e "${GREEN} 7.${NC} Clear CocoaPods Caches$(est cocoapods)"
     echo -e "${GREEN} 8.${NC} Clear IDE (JetBrains, VSCode) Caches$(est ide)"
     echo -e "${GREEN} 9.${NC} Clean System Junk & Logs (requires sudo)$(est system)"
