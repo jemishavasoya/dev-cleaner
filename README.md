@@ -180,6 +180,25 @@ We welcome you to submit Issues and Pull Requests!
 ### Permission Errors
 - If you encounter permission errors while running scripts, try running with `sudo` (Linux/macOS) or as Administrator (Windows).
 
+### Free Space Did Not Change After Cleanup (macOS)
+
+The summary prints two different things on purpose:
+
+```
+Reclaimed:  ~3.0Gi
+Free space: 21.4Gi → 21.4Gi
+```
+
+**`Reclaimed` is measured on the files that were actually deleted** — that data is gone. **Free space can lag behind**, because APFS keeps the blocks of a deleted file allocated as long as a Time Machine *local snapshot* still references them (Finder calls this "purgeable" space). macOS releases it on its own, usually within 24 hours or as soon as the disk gets tight.
+
+To get the space back right now, run **option 17 (Remove Time Machine Local Snapshots)** — or check what is pinned:
+
+```bash
+tmutil listlocalsnapshots /
+```
+
+Two other cases where free space lags: apps still holding deleted files open (quit Xcode, Simulator, browsers), and Docker — `docker system prune` frees space *inside* Docker's own disk image, and the host only sees it once Docker Desktop compacts that image.
+
 ### Tool Not Found
 - Make sure tools like `flutter` or `brew` are installed and added to your system PATH.
 - On macOS/Linux, check PATH with `echo $PATH`.
