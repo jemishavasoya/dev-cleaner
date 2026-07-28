@@ -198,6 +198,19 @@ sudo_du_kb_sum() {
     echo "$total"
 }
 
+# KB of the Homebrew cache that `brew cleanup --prune=all` can actually free:
+# the downloads, minus the JSON API metadata and the bootsnap compile cache,
+# which the prune leaves in place. Read-only. Shared by estimate_all() and the
+# dry-run credit so option 6's estimate and "Would reclaim" cannot drift apart.
+brew_reclaimable_kb() {
+    local cache="${1:-}"
+    [ -n "$cache" ] || cache="$(brew --cache 2>/dev/null)"
+    [ -n "$cache" ] || { echo 0; return 0; }
+    local kb
+    kb=$(( $(du_kb_sum "$cache") - $(du_kb_sum "$cache/api" "$cache/bootsnap") ))
+    [ "$kb" -gt 0 ] && echo "$kb" || echo 0
+}
+
 # --- Reclaimed-space accounting ---
 # Free space (df) is a poor progress meter for a cleaner on macOS: on APFS the
 # blocks of a deleted file stay allocated as long as a Time Machine local
@@ -252,6 +265,9 @@ print_reclaim_hint() {
 # Run a cleanup command that shrinks a cache *in place* (npm/brew/dotnet/…
 # manage their own directories, so safe_rm never sees those bytes) and credit
 # the size difference to the reclaimed total.
+# Dry-run aware like safe_rm: the command is announced and its cache measured,
+# never executed. Keeping that guard here rather than in every caller is what
+# makes it impossible for a new call site to delete files under --dry-run.
 # Usage: tracked_run <path> [<path> ...] -- <command> [<args> ...]
 tracked_run() {
     local paths=()
@@ -260,6 +276,17 @@ tracked_run() {
         shift
     done
     [ $# -gt 0 ] && shift  # drop the --
+
+    if $DRY_RUN; then
+        # Upper bound: these tools empty their cache dir (pnpm/brew only prune
+        # part of it), which is also what estimate_all() measures, so the
+        # dry-run total and the menu estimate stay consistent.
+        local kb
+        kb=$(du_kb_sum "${paths[@]}")
+        add_reclaimed_kb "$kb"
+        echo -e "${YELLOW}[DRY-RUN] Would run: $* ($(human_kb "$kb"))${NC}"
+        return 0
+    fi
 
     local before after status
     before=$(du_kb_sum "${paths[@]}")
@@ -560,12 +587,7 @@ cleanup_flutter() {
         local froot flutter_cache=""
         froot="$(cd "$(dirname "$(command -v flutter)")" 2>/dev/null && pwd)"
         [ -n "$froot" ] && flutter_cache="$froot/cache"
-        if $DRY_RUN; then
-            add_reclaimed_kb "$(du_kb_sum "$flutter_cache")"
-            echo -e "${YELLOW}[DRY-RUN] Would run: flutter cache clean (${flutter_cache:-global cache})${NC}"
-        else
-            tracked_run "$flutter_cache" -- flutter cache clean 2>/dev/null || true
-        fi
+        tracked_run "$flutter_cache" -- flutter cache clean 2>/dev/null || true
     else
         print_item "✕" "${YELLOW}" "Flutter command not found. Skipping."
     fi
@@ -627,25 +649,17 @@ cleanup_npm_yarn() {
 cleanup_nuget() {
     if command -v dotnet &> /dev/null; then
         print_item "✓" "${GREEN}" "Clearing all NuGet caches (global-packages, http-cache, temp, plugins)..."
-        # NuGet has no --dry-run; honour the flag manually like cleanup_docker.
         # 'all' covers global-packages (extracted packages, the bulk),
         # http-cache, temp and plugins-cache; all re-created on next restore.
         # Matches the Windows dev-cleaner.ps1 which also clears 'all'.
         # Enumerate the cache dirs first so their size can be credited to the
         # "Reclaimed" total (dotnet clears them itself, safe_rm never sees them).
-        local nuget_dirs=() nuget_dir kb
+        # NuGet has no --dry-run of its own; tracked_run honours the flag.
+        local nuget_dirs=() nuget_dir
         while IFS= read -r nuget_dir; do
             [ -n "$nuget_dir" ] && nuget_dirs+=("$nuget_dir")
         done < <(dotnet nuget locals all --list 2>/dev/null | sed 's/^[a-z-]*: //' | tr -d '\r')
-        if $DRY_RUN; then
-            for nuget_dir in "${nuget_dirs[@]}"; do
-                kb=$(du_kb_sum "$nuget_dir")
-                add_reclaimed_kb "$kb"
-                echo -e "${YELLOW}[DRY-RUN] Would clear NuGet cache: ${nuget_dir} ($(human_kb "$kb"))${NC}"
-            done
-        else
-            tracked_run "${nuget_dirs[@]}" -- dotnet nuget locals all --clear
-        fi
+        tracked_run "${nuget_dirs[@]}" -- dotnet nuget locals all --clear
     else
         print_item "✕" "${YELLOW}" "dotnet (NuGet) not found. Skipping."
     fi
@@ -662,13 +676,18 @@ cleanup_homebrew() {
         # install/upgrade. It is also what estimate_all() measures below, so
         # plain `brew cleanup` made the estimate promise space it would not
         # reclaim.
-        # brew has a native dry-run, so use it instead of a manual guard.
+        # brew is the one exception to tracked_run's dry-run handling: it has a
+        # native --dry-run worth showing, and only part of its cache dir is
+        # reclaimable, so credit brew_reclaimable_kb() instead of the whole dir.
+        local brew_cache
+        brew_cache="$(brew --cache 2>/dev/null)"
         if $DRY_RUN; then
             echo -e "${YELLOW}[DRY-RUN] Would run: brew cleanup --prune=all${NC}"
             brew cleanup --prune=all --dry-run
+            add_reclaimed_kb "$(brew_reclaimable_kb "$brew_cache")"
         else
             # brew prunes its own cache dir, so measure that dir around the call.
-            tracked_run "$(brew --cache 2>/dev/null)" -- brew cleanup --prune=all
+            tracked_run "$brew_cache" -- brew cleanup --prune=all
         fi
     else
         print_item "✕" "${YELLOW}" "Homebrew not found. Skipping."
@@ -1039,16 +1058,9 @@ estimate_all() {
     total=$((total + nuget_kb))
 
     print_item "•" "${FAINT}" "Measuring Homebrew cache..."
-    local brew_kb=0 brew_cache
+    local brew_kb=0
     if command -v brew >/dev/null 2>&1; then
-        brew_cache="$(brew --cache 2>/dev/null)"
-        if [ -n "$brew_cache" ]; then
-            brew_kb=$(du_kb_sum "$brew_cache")
-            # `brew cleanup --prune=all` empties the download cache but leaves
-            # the JSON API metadata and the bootsnap compile cache in place, so
-            # they are not reclaimable and must not be counted here.
-            brew_kb=$((brew_kb - $(du_kb_sum "$brew_cache/api" "$brew_cache/bootsnap")))
-        fi
+        brew_kb=$(brew_reclaimable_kb)
     fi
     set_estimate homebrew "~$(human_kb "$brew_kb")"
     total=$((total + brew_kb))
