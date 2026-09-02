@@ -211,6 +211,81 @@ brew_reclaimable_kb() {
     [ "$kb" -gt 0 ] && echo "$kb" || echo 0
 }
 
+# --- Claude Code versions ---
+# Claude Code's native installer keeps every version it has ever installed
+# under versions/ and never removes the old ones (~190 MB per release). Unlike
+# every other target in this script that is NOT a cache directory: one of those
+# files is the binary the `claude` command actually runs, so the active version
+# must survive. These two helpers are read-only and are the single source of
+# truth for "what is deletable", shared by estimate_all() and
+# cleanup_claude_code() so the estimate and the cleanup cannot drift apart.
+CLAUDE_VERSIONS_DIR="$HOME/.local/share/claude/versions"
+CLAUDE_LAUNCHER="$HOME/.local/bin/claude"
+
+# Echo the versions/<release> file the launcher resolves to. Read-only.
+#   rc 0 -> path echoed
+#   rc 1 -> versions/ does not exist (Claude Code not installed this way)
+#   rc 2 -> active version undeterminable; the caller must skip the target
+claude_active_version() {
+    [ -d "$CLAUDE_VERSIONS_DIR" ] || return 1
+    # A regular file (or nothing) means the user replaced the launcher with
+    # their own script or binary. Claude Code itself then keeps every version
+    # on disk because it cannot tell which one that launcher needs, and
+    # neither can we.
+    [ -L "$CLAUDE_LAUNCHER" ] || return 2
+    # A dangling launcher names a version that is no longer on disk, so the
+    # active one cannot be identified: skip rather than prune everything.
+    [ -e "$CLAUDE_LAUNCHER" ] || return 2
+
+    local target dir versions_dir
+    target=$(readlink "$CLAUDE_LAUNCHER") || return 2
+    # readlink may hand back a path relative to the link's own directory
+    case "$target" in
+        /*) ;;
+        *) target="$(dirname "$CLAUDE_LAUNCHER")/$target" ;;
+    esac
+    # Resolve ".." and symlinked parents on both sides before comparing them:
+    # a relative link reads "../share/claude/versions/<x>", which as a plain
+    # string never prefix-matches $CLAUDE_VERSIONS_DIR.
+    dir="$(cd "$(dirname "$target")" 2>/dev/null && pwd -P)" || return 2
+    versions_dir="$(cd "$CLAUDE_VERSIONS_DIR" 2>/dev/null && pwd -P)" || return 2
+    # A launcher pointing anywhere but straight into versions/ is someone
+    # else's launcher too.
+    [ -n "$dir" ] && [ "$dir" = "$versions_dir" ] || return 2
+
+    echo "$dir/$(basename "$target")"
+}
+
+# Echo one removable version file per line. Read-only.
+# An empty list with rc 0 is a valid answer: only the active version is left.
+# Same rc contract as claude_active_version().
+claude_removable_versions() {
+    local active status active_name
+    active=$(claude_active_version); status=$?
+    [ $status -eq 0 ] || return $status
+    active_name="$(basename "$active")"
+
+    local f
+    for f in "$CLAUDE_VERSIONS_DIR"/*; do
+        # Skips subdirectories and the unexpanded glob of an empty directory
+        [ -f "$f" ] || continue
+        # Compared by name, not by path string: $active is canonical while $f
+        # is spelled as the glob produced it, and both are known to sit
+        # directly in versions/, where names are unique.
+        [ "$(basename "$f")" = "$active_name" ] && continue
+        # An older session may still be running from an old binary. `pgrep -x
+        # claude` cannot find it: the files are named after the release, so the
+        # process name is e.g. "2.1.258", not "claude". lsof on the file is the
+        # reliable test. stderr is always dropped ("can't stat()" warnings
+        # would land in the middle of the menu output).
+        if command -v lsof >/dev/null 2>&1 && [ -n "$(lsof -t -- "$f" 2>/dev/null)" ]; then
+            continue
+        fi
+        echo "$f"
+    done
+    return 0
+}
+
 # --- Reclaimed-space accounting ---
 # Free space (df) is a poor progress meter for a cleaner on macOS: on APFS the
 # blocks of a deleted file stay allocated as long as a Time Machine local
@@ -869,6 +944,38 @@ cleanup_electron() {
     fi
 }
 
+# Prunes ~/.local/share/claude/versions, keeping the version the `claude`
+# launcher points at (plus any binary a running session still has open).
+# Never touches ~/.claude/ or ~/.claude.json: settings, MCP config and
+# session history live there.
+cleanup_claude_code() {
+    local out status active v
+    # Command substitution, not a pipeline: `claude_removable_versions | while
+    # read` would leave $? holding the loop's status, not the helper's.
+    out="$(claude_removable_versions)"; status=$?
+
+    if [ $status -eq 1 ]; then
+        print_item "✕" "${YELLOW}" "Claude Code not found. Skipping."
+        return
+    fi
+    if [ $status -eq 2 ]; then
+        print_item "✕" "${YELLOW}" "Claude Code: ${CLAUDE_LAUNCHER} does not resolve into versions/ (custom or missing launcher)."
+        print_item "→" "${CYAN}" "The version in use cannot be determined, so nothing is removed."
+        return
+    fi
+    if [ -z "$out" ]; then
+        print_item "✓" "${GREEN}" "Claude Code: only the version in use is installed. Nothing to prune."
+        return
+    fi
+
+    active="$(claude_active_version)"
+    print_item "✓" "${GREEN}" "Removing old Claude Code versions (keeping $(basename "$active"))..."
+    # Quoted read, never `for v in $out`: $HOME may contain spaces.
+    while IFS= read -r v; do
+        [ -n "$v" ] && safe_rm "$v"
+    done <<< "$out"
+}
+
 # Usage: cleanup_docker [interactive]
 #   no arg      -> safe `prune -f` only, no prompt (used by "Clear All Caches"
 #                  so a bulk run never deletes tagged images by surprise)
@@ -1123,6 +1230,26 @@ estimate_all() {
     set_estimate electron "$(human_kb "$kb")"
     total=$((total + kb))
 
+    print_item "•" "${FAINT}" "Measuring Claude Code old versions..."
+    local claude_out claude_status claude_v
+    local claude_paths=()
+    claude_out="$(claude_removable_versions)"; claude_status=$?
+    if [ $claude_status -eq 2 ]; then
+        # Not measurable, so not added to the byte total, like the Docker
+        # "daemon not running" case below.
+        set_estimate claude "n/a (custom launcher)"
+    else
+        # The here-string yields one empty iteration even for empty output
+        while IFS= read -r claude_v; do
+            [ -n "$claude_v" ] && claude_paths+=("$claude_v")
+        done <<< "$claude_out"
+        kb=0
+        [ ${#claude_paths[@]} -gt 0 ] && kb=$(du_kb_sum "${claude_paths[@]}")
+        # Exact file sizes, not an approximation: no "~" prefix.
+        set_estimate claude "$(human_kb "$kb")"
+        total=$((total + kb))
+    fi
+
     # Docker is not path-based: ask docker itself (read-only). Two figures,
     # because option 15 offers two prune modes:
     #   -f  : build-cache reclaimable + dangling (untagged) images
@@ -1226,10 +1353,11 @@ display_menu() {
     echo -e "${GREEN}16.${NC} Clean App Containers (Slack, Teams, Discord, Spotify, WhatsApp)$(est appcontainers)"
     echo -e "${GREEN}17.${NC} Remove Time Machine Local Snapshots (requires sudo)$(est timemachine)"
     echo -e "${GREEN}18.${NC} Clear .NET NuGet Caches (global-packages, http-cache, temp, plugins)$(est nuget)"
+    echo -e "${GREEN}19.${NC} Clear old Claude Code versions ${FAINT}(keeps the version in use)${NC}$(est claude)"
     echo ""
     echo -e "${CYAN}99.${NC} Estimate reclaimable space ${FAINT}(read-only, ~ = approximate)${NC}"
     echo ""
-    echo -e "→ Please enter your choice (0-18, or 99 to estimate): ${NC}\c"
+    echo -e "→ Please enter your choice (0-19, or 99 to estimate): ${NC}\c"
 }
 
 # --- Help function ---
@@ -1315,6 +1443,7 @@ main_loop() {
                 cleanup_browser_caches
                 cleanup_cordova
                 cleanup_electron
+                cleanup_claude_code
                 cleanup_docker
                 cleanup_app_containers
                 cleanup_timemachine_snapshots
@@ -1428,6 +1557,10 @@ main_loop() {
                 print_section_header "Performing .NET NuGet Cleanup"
                 cleanup_nuget
                 ;;
+            19)
+                print_section_header "Performing Claude Code Version Cleanup"
+                cleanup_claude_code
+                ;;
             99)
                 print_section_header "Estimating Reclaimable Space"
                 estimate_all
@@ -1436,7 +1569,7 @@ main_loop() {
                 continue
                 ;;
             *)
-                echo -e "${RED}Invalid choice. Please enter a number between 0 and 18.${NC}"
+                echo -e "${RED}Invalid choice. Please enter a number between 0 and 19.${NC}"
                 sleep 2
                 ;;
         esac

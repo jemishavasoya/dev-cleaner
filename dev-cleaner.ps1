@@ -654,6 +654,103 @@ function Clear-Electron {
     }
 }
 
+# Claude Code's native installer keeps every version it has ever installed
+# under versions\ and never removes the old ones (~190 MB per release). Unlike
+# every other target in this script that is NOT a cache directory: one of those
+# files is the binary the `claude` command actually runs.
+# There is no symlink to resolve on Windows (.local\bin\claude.exe is a COPY of
+# the version in use), so the active one is identified by size and then SHA256.
+# Read-only. Shared by Clear-ClaudeCode and Invoke-EstimateAll so the estimate
+# and the cleanup cannot drift apart.
+# Status: 'missing' (not installed) | 'unknown' (custom launcher: skip the
+# target entirely) | 'ok' (Files is authoritative, possibly empty).
+function Get-ClaudeRemovableVersions {
+    $versionsDir = "$env:USERPROFILE\.local\share\claude\versions"
+    $launcher    = "$env:USERPROFILE\.local\bin\claude.exe"
+
+    if (-not (Test-Path $versionsDir)) {
+        return [PSCustomObject]@{ Status = 'missing'; ActiveName = $null; Files = @(); InUse = @() }
+    }
+    if (-not (Test-Path $launcher)) {
+        return [PSCustomObject]@{ Status = 'unknown'; ActiveName = $null; Files = @(); InUse = @() }
+    }
+
+    $files = @(Get-ChildItem -Path $versionsDir -File -Force -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) {
+        return [PSCustomObject]@{ Status = 'ok'; ActiveName = $null; Files = @(); InUse = @() }
+    }
+
+    # Hash only the candidates of exactly the launcher's size: hashing 200 MB
+    # binaries that cannot possibly match is pure I/O.
+    $launcherItem = Get-Item -LiteralPath $launcher -Force -ErrorAction SilentlyContinue
+    $active = $null
+    if ($launcherItem) {
+        $launcherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256 -ErrorAction SilentlyContinue).Hash
+        if ($launcherHash) {
+            foreach ($f in ($files | Where-Object { $_.Length -eq $launcherItem.Length })) {
+                $h = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256 -ErrorAction SilentlyContinue).Hash
+                if ($h -eq $launcherHash) { $active = $f; break }
+            }
+        }
+    }
+    # No match means the launcher is not one of these binaries: the user
+    # replaced it with their own, exactly like a non-symlink launcher on
+    # macOS/Linux. The version in use cannot be identified, so skip.
+    if (-not $active) {
+        return [PSCustomObject]@{ Status = 'unknown'; ActiveName = $null; Files = @(); InUse = @() }
+    }
+
+    # Keep the newest file as well: an update can land in versions\ without
+    # being copied into bin\, so the newest one may legitimately not be the
+    # one currently running.
+    $newest = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+    # Binaries an older session is still running from. $_.Path throws Access
+    # Denied for other users' processes, and an exception raised inside the
+    # pipeline would abort it and silently skip every process after it, so the
+    # guard sits inside the scriptblock, per element, never around the pipeline.
+    $inUse = @(Get-Process -ErrorAction SilentlyContinue |
+               Where-Object { try { $_.Path -like "$versionsDir\*" } catch { $false } } |
+               ForEach-Object { try { $_.Path } catch { $null } })
+
+    $removable = @($files | Where-Object {
+        $_.FullName -ne $active.FullName -and
+        $_.FullName -ne $newest.FullName -and
+        $inUse -notcontains $_.FullName
+    })
+
+    return [PSCustomObject]@{ Status = 'ok'; ActiveName = $active.Name; Files = $removable; InUse = $inUse }
+}
+
+# Prunes %USERPROFILE%\.local\share\claude\versions, keeping the version in use,
+# the newest one, and anything a running session still holds open.
+# Never touches %USERPROFILE%\.claude\ or .claude.json: settings, MCP config
+# and session history live there.
+function Clear-ClaudeCode {
+    $info = Get-ClaudeRemovableVersions
+
+    if ($info.Status -eq 'missing') {
+        Write-Item "✕" "Yellow" "Claude Code not found. Skipping."
+        return
+    }
+    if ($info.Status -eq 'unknown') {
+        Write-Item "✕" "Yellow" "Claude Code: the version in use cannot be identified (custom launcher). Skipping."
+        return
+    }
+    if ($info.InUse.Count -gt 0) {
+        Write-Item "→" "Cyan" "Claude Code: $($info.InUse.Count) version(s) still running; keeping them."
+    }
+    if ($info.Files.Count -eq 0) {
+        Write-Item "✓" "Green" "Claude Code: nothing to prune."
+        return
+    }
+
+    Write-Item "✓" "Green" "Removing old Claude Code versions (keeping $($info.ActiveName) and the newest one)..."
+    foreach ($f in $info.Files) {
+        Remove-SafelyWithTracking -Path $f.FullName -Description "Claude Code version: $($f.Name)"
+    }
+}
+
 # -Interactive offers the deeper `prune -af` via a secondary prompt. "Clear All
 # Caches" calls this without it, so a bulk run never deletes tagged images by
 # surprise.
@@ -844,6 +941,20 @@ function Invoke-EstimateAll {
     $b = Get-PathSizeBytes $electronCache
     Set-Estimate "electron" (Format-Size $b); $total += $b
 
+    # Claude Code old versions
+    Write-Host "  Measuring Claude Code old versions..." -ForegroundColor DarkGray
+    $claudeInfo = Get-ClaudeRemovableVersions
+    if ($claudeInfo.Status -eq 'unknown') {
+        # Not measurable, so not added to the byte total, like the Docker
+        # "daemon not running" case below.
+        Set-Estimate "claudecode" "n/a (custom launcher)"
+    } else {
+        $claudePaths = @()
+        foreach ($f in $claudeInfo.Files) { $claudePaths += $f.FullName }
+        $b = Get-PathSizeBytes $claudePaths
+        Set-Estimate "claudecode" (Format-Size $b); $total += $b
+    }
+
     # Docker is not path-based: ask docker itself (read-only). Two figures,
     # because option 11 offers two prune modes:
     #   -f  : build-cache reclaimable + dangling (untagged) images
@@ -944,16 +1055,18 @@ function Show-Menu {
     Write-Host (" 9. Clear Cordova tmp files" + (Get-Est 'cordova')) -ForegroundColor Green
     Write-Host ("10. Clear Electron cache" + (Get-Est 'electron')) -ForegroundColor Green
     Write-Host ("11. Clear Docker (prune containers, dangling images & build cache; asks before removing unused tagged images)" + (Get-Est 'docker')) -ForegroundColor Green
+    Write-Host "─── AI CLI Tools ───" -ForegroundColor DarkGray
+    Write-Host ("12. Clear old Claude Code versions (keeps the version in use)" + (Get-Est 'claudecode')) -ForegroundColor Green
     Write-Host "─── IDEs & Editors ───" -ForegroundColor DarkGray
-    Write-Host ("12. Clear IDE Caches (JetBrains, VSCode)" + (Get-Est 'ide')) -ForegroundColor Green
+    Write-Host ("13. Clear IDE Caches (JetBrains, VSCode)" + (Get-Est 'ide')) -ForegroundColor Green
     Write-Host "─── System ───" -ForegroundColor DarkGray
-    Write-Host ("13. Clean Windows Temp & Recycle Bin" + (Get-Est 'windowstemp')) -ForegroundColor Green
-    Write-Host ("14. Clear Browser Caches (Chrome, Edge, Firefox, Brave, Opera)" + (Get-Est 'browser')) -ForegroundColor Green
-    Write-Host ("15. Clean App Caches (Slack, Teams, Discord, Spotify, WhatsApp)" + (Get-Est 'appcontainers')) -ForegroundColor Green
+    Write-Host ("14. Clean Windows Temp & Recycle Bin" + (Get-Est 'windowstemp')) -ForegroundColor Green
+    Write-Host ("15. Clear Browser Caches (Chrome, Edge, Firefox, Brave, Opera)" + (Get-Est 'browser')) -ForegroundColor Green
+    Write-Host ("16. Clean App Caches (Slack, Teams, Discord, Spotify, WhatsApp)" + (Get-Est 'appcontainers')) -ForegroundColor Green
     Write-Host ""
     Write-Host "99. Estimate reclaimable space (read-only, ~ = approximate)" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "→ Please enter your choice (0-15, or 99 to estimate): " -NoNewline
+    Write-Host "→ Please enter your choice (0-16, or 99 to estimate): " -NoNewline
 }
 
 # --- Main Loop ---
@@ -982,6 +1095,7 @@ function Start-MainLoop {
                 Clear-PlatformIO
                 Clear-Cordova
                 Clear-Electron
+                Clear-ClaudeCode
                 Clear-Docker
                 Clear-IdeCaches
                 Clear-WindowsTemp
@@ -1057,18 +1171,22 @@ function Start-MainLoop {
                 Clear-Docker -Interactive
             }
             "12" {
+                Write-SectionHeader "Performing Claude Code Version Cleanup"
+                Clear-ClaudeCode
+            }
+            "13" {
                 Write-SectionHeader "Performing IDE Caches Cleanup"
                 Clear-IdeCaches
             }
-            "13" {
+            "14" {
                 Write-SectionHeader "Performing Windows Temp & Recycle Bin Cleanup"
                 Clear-WindowsTemp
             }
-            "14" {
+            "15" {
                 Write-SectionHeader "Performing Browser Caches Cleanup"
                 Clear-BrowserCaches
             }
-            "15" {
+            "16" {
                 Write-SectionHeader "Performing App Caches Cleanup"
                 Clear-AppContainers
             }
@@ -1080,7 +1198,7 @@ function Start-MainLoop {
                 continue
             }
             default {
-                Write-Host "Invalid choice. Please enter a number between 0 and 15." -ForegroundColor Red
+                Write-Host "Invalid choice. Please enter a number between 0 and 16." -ForegroundColor Red
                 Start-Sleep -Seconds 2
                 continue
             }
