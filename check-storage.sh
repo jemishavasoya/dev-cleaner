@@ -29,5 +29,9 @@ echo "🎵 Spotify Cache:"
 du -sh ~/Library/Caches/com.spotify.client 2>/dev/null || echo "None found"
 echo ""
 
+echo "🤖 Claude Code versions:"
+du -sh ~/.local/share/claude/versions 2>/dev/null || echo "None found"
+echo ""
+
 echo "📦 Largest directories in ~/Library:"
 du -sh ~/Library/* 2>/dev/null | sort -hr | head -10

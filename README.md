@@ -28,6 +28,7 @@ This tool is for **educational purposes**, focusing on safely removing developme
   * Android Gradle caches (`android/.gradle`, `android/build`, `android/app/build`)
   * iOS CocoaPods caches (`ios/Pods`, `ios/Podfile.lock`, `ios/.symlinks`, Flutter frameworks)
   * Global Flutter cache
+* **AI CLI Tools:** Prunes the old Claude Code binaries the native installer leaves behind (`~/.local/share/claude/versions`, ~190 MB per release), keeping the version in use.
 * **Interactive Menu:** Allows selection of specific cleanup targets (e.g., Xcode only).
 * **Multi-platform Support:** Supports **macOS**, **Linux**, and **Windows**.
 
@@ -149,6 +150,15 @@ The Windows version includes all cross-platform cleanups plus:
 - **Windows Temp:** Clears user and system temp folders, plus Recycle Bin
 
 > **Note:** Some operations require Administrator privileges. The script will automatically request elevation if needed.
+
+#### 🤖 Claude Code Version Cleanup
+
+Claude Code's native installer keeps every version it has ever installed under `~/.local/share/claude/versions/` and never removes the old ones, so weeks of background auto-updates quietly cost several GB. Option 19 (option 12 on Windows) prunes them. Because one of those files is the binary the `claude` command actually runs, this option is deliberately conservative:
+
+- **Always kept:** the version the launcher (`~/.local/bin/claude`) resolves to, and any binary a running session still has open.
+- **Also kept on Windows:** the newest file, since there is no symlink to resolve and an update can land in `versions\` without being copied into `bin\`.
+- **Skipped entirely** — nothing is removed, with a warning — when the launcher is not a symlink into `versions/` (you replaced it with your own script) or points at a version that is no longer on disk. The active version cannot be identified, so nothing is guessed.
+- **Never touched:** `~/.claude/` and `~/.claude.json`. Settings, MCP configuration and session history live there.
 
 #### 🧹 Flutter Cleanup Details
 
