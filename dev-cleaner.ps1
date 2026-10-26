@@ -572,6 +572,26 @@ function Clear-BrowserCaches {
     }
 }
 
+# Cache-only paths inside a WhatsApp Store app's WebView2 profile
+# (LocalCache\EBWebView). Cookies/Local Storage/IndexedDB/Session Storage sit
+# next to these and hold the login session: never delete the profile root.
+# Shared by Clear-AppContainers and Invoke-EstimateAll so they cannot drift.
+function Get-WhatsAppCachePaths {
+    return @(
+        "Default\Cache",
+        "Default\Code Cache",
+        "Default\GPUCache",
+        "Default\DawnGraphiteCache",
+        "Default\DawnWebGPUCache",
+        "Default\Service Worker\CacheStorage",
+        "GPUPersistentCache",
+        "GrShaderCache",
+        "ShaderCache",
+        "component_crx_cache",
+        "extensions_crx_cache"
+    )
+}
+
 function Clear-AppContainers {
     Write-Item "✓" "Green" "Cleaning app container caches..."
 
@@ -617,10 +637,16 @@ function Clear-AppContainers {
         Remove-SafelyWithTracking -Path "$env:LOCALAPPDATA\WhatsApp\Cache" -Description "WhatsApp Cache"
     }
 
-    # WhatsApp UWP
+    # WhatsApp UWP (Store app): only the cache subfolders of the WebView2
+    # profile. Deleting LocalCache itself wipes the session and forces a
+    # QR re-scan, so that is deliberately not done.
     $whatsappUwp = Get-ChildItem -Path "$env:LOCALAPPDATA\Packages" -Filter "*WhatsApp*" -Directory -ErrorAction SilentlyContinue
     foreach ($pkg in $whatsappUwp) {
-        Remove-SafelyWithTracking -Path "$($pkg.FullName)\LocalCache" -Description "WhatsApp UWP cache"
+        $waProfile = "$($pkg.FullName)\LocalCache\EBWebView"
+        if (-not (Test-Path $waProfile)) { continue }
+        foreach ($rel in Get-WhatsAppCachePaths) {
+            Remove-SafelyWithTracking -Path "$waProfile\$rel" -Description "WhatsApp cache: $rel"
+        }
     }
 }
 
@@ -1021,7 +1047,11 @@ function Invoke-EstimateAll {
         "$env:LOCALAPPDATA\WhatsApp\Cache"
     )
     $waUwp = Get-ChildItem -Path "$env:LOCALAPPDATA\Packages" -Filter "*WhatsApp*" -Directory -ErrorAction SilentlyContinue
-    foreach ($w in $waUwp) { $acPaths += "$($w.FullName)\LocalCache" }
+    foreach ($w in $waUwp) {
+        $waProfile = "$($w.FullName)\LocalCache\EBWebView"
+        if (-not (Test-Path $waProfile)) { continue }
+        foreach ($rel in Get-WhatsAppCachePaths) { $acPaths += "$waProfile\$rel" }
+    }
     $b = Get-PathSizeBytes $acPaths
     Set-Estimate "appcontainers" (Format-Size $b); $total += $b
 
